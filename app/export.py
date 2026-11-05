@@ -77,7 +77,11 @@ def _prepare_out(out: Path) -> None:
 
 
 def _version_assets(out: Path) -> None:
-    """Remplace ``fichier?v=…`` dans index.html par une empreinte de son contenu."""
+    """Remplace ``fichier?v=…`` dans index.html par une empreinte de son contenu.
+
+    Seuls les chemins relatifs (app.js, styles.css…) sont concernés : les URL
+    absolues (/manifest.webmanifest?v=2, icônes) gardent leur version explicite.
+    """
     index = out / "index.html"
     html = index.read_text(encoding="utf-8")
 
@@ -86,7 +90,7 @@ def _version_assets(out: Path) -> None:
         digest = hashlib.sha256(asset.read_bytes()).hexdigest()[:10] if asset.exists() else m.group(3)
         return f'{m.group(1)}="{m.group(2)}?v={digest}"'
 
-    html = re.sub(r'(href|src)="([\w./-]+)\?v=([^"]*)"', repl, html)
+    html = re.sub(r'(href|src)="([\w.-][\w./-]*)\?v=([^"]*)"', repl, html)
     index.write_text(html, encoding="utf-8")
 
 

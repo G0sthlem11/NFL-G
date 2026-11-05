@@ -77,3 +77,22 @@ def test_refuses_to_wipe_unrelated_folder(tmp_path):
     with pytest.raises(SystemExit):
         export(repo, other)
     assert (other / "important.txt").exists()
+
+
+ICONS = ("apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png")
+
+
+def test_home_screen_icons_and_manifest_exported(exported):
+    res, _ = exported
+    for name in ICONS + ("manifest.webmanifest",):
+        assert (res.out / name).is_file(), name
+    manifest = json.loads((res.out / "manifest.webmanifest").read_text(encoding="utf-8"))
+    assert manifest["name"] == manifest["short_name"] == "Gameday"
+    assert manifest["start_url"] == manifest["scope"] == "/" and manifest["display"] == "standalone"
+    by_purpose = {(i["sizes"], i["purpose"]) for i in manifest["icons"]}
+    assert by_purpose == {("192x192", "any"), ("512x512", "any"), ("512x512", "maskable")}
+    for icon in manifest["icons"]:  # chaque icône citée existe dans dist/
+        assert (res.out / icon["src"].lstrip("/").split("?")[0]).is_file(), icon["src"]
+    html = (res.out / "index.html").read_text(encoding="utf-8")
+    assert '<link rel="manifest" href="/manifest.webmanifest?v=2" crossorigin="use-credentials">' in html
+    assert 'href="/apple-touch-icon.png?v=2"' in html  # version explicite conservée par l'export

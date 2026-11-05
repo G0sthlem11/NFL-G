@@ -81,3 +81,9 @@ def test_front_is_served(client):
     assert client.get("/favicon.svg").status_code == 200
     assert 'mode: "api"' in client.get("/config.js").text
     assert client.get("/api/inconnu").status_code == 404
+
+
+def test_manifest_served_with_manifest_content_type(client):
+    r = client.get("/manifest.webmanifest")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/manifest+json")

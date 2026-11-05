@@ -5,6 +5,7 @@ Lancement : ``py -m uvicorn app.main:app --reload``
 from __future__ import annotations
 
 import logging
+import mimetypes
 from pathlib import Path
 
 import nflreadpy as nfl
@@ -18,6 +19,8 @@ from .data.repository import NflRepository
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
 STATIC = Path(__file__).parent / "static"
+# Python ne connaît pas toujours .webmanifest (Windows notamment) : type explicite.
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 app = FastAPI(title="NFL Gameday")
 repo = NflRepository(SeasonCache(nfl.get_current_season()))
