@@ -5,8 +5,18 @@ import polars as pl
 
 from .cache import SeasonCache
 from .key_players import select_key_players
-from .models import Game, GameDetail, KeyPlayers, Meta, Team, WeekInfo
-from .normalize import as_str, to_game, to_team_stats, week_label
+from .models import (DivisionStandings, Game, GameDetail, KeyPlayers, Meta, PlayerGame,
+                     PlayerSeason, Team, WeekInfo)
+from .normalize import as_int, as_str, to_game, to_player_line, to_team_stats, week_label
+from .standings import compute_standings
+
+# Colonnes player_stats additionnées pour les totaux de saison.
+SEASON_SUM_COLUMNS = [
+    "completions", "attempts", "passing_yards", "passing_tds", "passing_interceptions", "sacks_suffered",
+    "carries", "rushing_yards", "rushing_tds", "targets", "receptions", "receiving_yards", "receiving_tds",
+    "def_tackles_solo", "def_tackle_assists", "def_tackles_for_loss", "def_sacks", "def_qb_hits",
+    "def_interceptions", "def_pass_defended", "def_fumbles_forced",
+]
 
 
 class NflRepository:
@@ -98,6 +108,54 @@ class NflRepository:
             home_stats=to_team_stats(game.home_team, ts_rows.get(game.home_team), fd_rows.get(game.home_team)),
             away_key=self._key_players(game, game.away_team),
             home_key=self._key_players(game, game.home_team),
+        )
+
+    def standings(self) -> list[DivisionStandings]:
+        teams = self.cache.get("teams")
+        if teams.is_empty():
+            return []
+        return compute_standings(self._schedules(), teams)
+
+    def player_season(self, player_id: str) -> PlayerSeason | None:
+        ps = self.cache.get("player_stats")
+        if ps.is_empty():
+            return None
+        rows = ps.filter(pl.col("player_id") == player_id)
+        if rows.is_empty():
+            return None
+        sched = {r["game_id"]: r for r in self._schedules()
+                 .filter(pl.col("game_id").is_in(rows["game_id"].to_list())).to_dicts()}
+
+        games: list[PlayerGame] = []
+        for r in rows.sort("week").to_dicts():
+            g = sched.get(r["game_id"])
+            if g is None:
+                continue
+            home = g["home_team"] == r["team"]
+            ts, os_ = (g["home_score"], g["away_score"]) if home else (g["away_score"], g["home_score"])
+            result = None
+            if ts is not None and os_ is not None:
+                result = "V" if ts > os_ else "D" if ts < os_ else "N"
+            games.append(PlayerGame(
+                game_id=r["game_id"], week=g["week"], week_label=week_label(g["game_type"], g["week"]),
+                team=r["team"], opponent=g["away_team"] if home else g["home_team"], home=home,
+                result=result, team_score=as_int(ts), opponent_score=as_int(os_), line=to_player_line(r),
+            ))
+
+        # Totaux saison : somme des colonnes de stats (les colonnes absentes restent nulles).
+        sums = rows.select([pl.col(c).sum() for c in SEASON_SUM_COLUMNS if c in rows.columns]).to_dicts()[0]
+        last = rows.sort("week").to_dicts()[-1]
+        totals = to_player_line({**sums, "player_id": player_id, "player_display_name": last.get("player_display_name"),
+                                 "position": last.get("position"), "team": last["team"]})
+        teams_seen: list[str] = []
+        for g in games:
+            if g.team not in teams_seen:
+                teams_seen.append(g.team)
+        return PlayerSeason(
+            player_id=player_id, name=totals.name, position=as_str(last.get("position")),
+            position_group=as_str(last.get("position_group")), teams=teams_seen,
+            headshot_url=as_str(last.get("headshot_url")), games_played=len(games),
+            totals=totals, games=games,
         )
 
     def _key_players(self, game: Game, team: str) -> KeyPlayers:

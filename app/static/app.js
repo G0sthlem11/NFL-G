@@ -261,6 +261,10 @@ const nf1 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
 const num = (v) => (v === null || v === undefined ? "—" : nf1.format(v));
 const ROOF = { outdoors: "En extérieur", dome: "Sous dôme", closed: "Toit fermé", open: "Toit ouvert" };
 
+function playerLink(p) {
+  return `<a class="player-link" href="#/player/${encodeURIComponent(p.player_id)}">${esc(p.name)}</a>`;
+}
+
 function teamName(abbr) {
   return state.teams.get(abbr)?.name || abbr;
 }
@@ -371,7 +375,7 @@ function playerCard(k) {
   return `
     <article class="card">
       <h4 class="card-role">${esc(k.label)}${pos}</h4>
-      <div class="card-head">${headshot(p)}<p class="card-name">${esc(p.name)}</p></div>
+      <div class="card-head">${headshot(p)}<p class="card-name">${playerLink(p)}</p></div>
       ${roleStats(k.role, p)}
       ${note}
     </article>`;
@@ -385,7 +389,7 @@ function bigPlays(list) {
     p.sacks ? `${num(p.sacks)} sack${p.sacks > 1 ? "s" : ""}` : "",
   ].filter(Boolean).join(" · ");
   return `<ul class="big-plays">${list.map((p) => `
-    <li><span class="bp-name">${esc(p.name)} <span class="bp-pos">${esc(p.position || "")}</span></span><span class="bp-what">${what(p)}</span></li>`).join("")}</ul>`;
+    <li><span class="bp-name">${playerLink(p)} <span class="bp-pos">${esc(p.position || "")}</span></span><span class="bp-what">${what(p)}</span></li>`).join("")}</ul>`;
 }
 
 function keyPlayersColumn(abbr, kp) {
@@ -403,7 +407,7 @@ function keyPlayersColumn(abbr, kp) {
         ${kp.edges.map(playerCard).join("")}
         <article class="card">
           <h4 class="card-role">Meilleur plaqueur</h4>
-          ${tl ? `<div class="card-head">${headshot(tl)}<p class="card-name">${esc(tl.name)} <span class="bp-pos">${esc(tl.position || "")}</span></p></div>
+          ${tl ? `<div class="card-head">${headshot(tl)}<p class="card-name">${playerLink(tl)} <span class="bp-pos">${esc(tl.position || "")}</span></p></div>
             ${statCells([["Plaq.", num(tl.tackles)], ["Solo", num(tl.tackles_solo)], ["Ast.", num(tl.tackle_assists)], ["TFL", num(tl.tackles_for_loss)]])}`
             : `<p class="card-name is-empty">—</p>`}
         </article>
@@ -471,6 +475,183 @@ async function renderGame(gameId) {
     ${body}`;
 }
 
+// --- Classement -------------------------------------------------------
+const fmtPct = (v) => (v === null || v === undefined ? "—" : v.toFixed(3).replace(/^0(?=\.)/, ""));
+const fmtDiff = (v) => (v > 0 ? `+${v}` : v < 0 ? `−${-v}` : "0");
+
+function standingsTable(d) {
+  const rows = d.rows.map((r, i) => {
+    const t = state.teams.get(r.team);
+    return `
+      <tr${i === 0 ? ' class="is-leader"' : ""}>
+        <th scope="row" class="st-team"><span class="st-team-inner">
+          <span class="pill"${teamColorStyle(t)} aria-hidden="true"></span>
+          <span class="st-abbr">${esc(r.team)}</span>
+          <span class="st-name">${esc(r.name)}</span>
+        </span></th>
+        <td>${r.wins}</td><td>${r.losses}</td><td>${r.ties}</td>
+        <td class="st-pct">${fmtPct(r.pct)}</td>
+        <td class="opt">${r.points_for}</td><td class="opt">${r.points_against}</td>
+        <td>${fmtDiff(r.diff)}</td>
+        <td class="opt">${esc(r.div_record)}</td><td class="opt">${esc(r.conf_record)}</td>
+        <td class="opt">${esc(r.home_record)}</td><td class="opt">${esc(r.away_record)}</td>
+        <td class="st-streak">${dash(r.streak)}</td>
+      </tr>`;
+  }).join("");
+  return `
+    <table class="standings">
+      <caption>${esc(d.name)}</caption>
+      <thead><tr>
+        <th scope="col" class="st-team"><span class="visually-hidden">Équipe</span></th>
+        <th scope="col" title="Victoires">V</th><th scope="col" title="Défaites">D</th><th scope="col" title="Nuls">N</th>
+        <th scope="col" title="Pourcentage de victoires">%</th>
+        <th scope="col" class="opt" title="Points marqués">PM</th><th scope="col" class="opt" title="Points encaissés">PE</th>
+        <th scope="col" title="Différence de points">Diff.</th>
+        <th scope="col" class="opt" title="Bilan en division">Div.</th><th scope="col" class="opt" title="Bilan en conférence">Conf.</th>
+        <th scope="col" class="opt" title="À domicile">Dom.</th><th scope="col" class="opt" title="À l'extérieur">Ext.</th>
+        <th scope="col" title="Série en cours">Série</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+async function renderStandings() {
+  setNav("standings");
+  document.title = "Classement — NFL Gameday";
+  setMessage("Chargement…");
+  const seq = state.routeSeq;
+  let divisions;
+  try {
+    divisions = await api("/api/standings");
+  } catch (err) {
+    if (seq === state.routeSeq) setMessage(`Impossible de charger le classement : ${err.message}`, true);
+    return;
+  }
+  if (seq !== state.routeSeq) return;
+  const conf = (c) => `
+    <section class="block conference">
+      <h2 class="section-title">${c}</h2>
+      ${divisions.filter((d) => d.conference === c).map(standingsTable).join("")}
+    </section>`;
+  view.innerHTML = `
+    <div class="page-head"><h1 class="page-title">Classement</h1></div>
+    <p class="page-sub">Saison régulière ${state.meta.season}, calculé à partir des résultats. Départage simplifié : confrontations directes, division, conférence, différence de points.</p>
+    ${conf("AFC")}${conf("NFC")}`;
+}
+
+// --- Page joueur --------------------------------------------------------
+const CATEGORIES = {
+  pass: {
+    label: "Passe",
+    has: (t) => (t.attempts || 0) > 0,
+    cols: [
+      ["C/A", (l) => (l.completions == null ? "—" : `${l.completions}/${dash(l.attempts)}`)],
+      ["Yds", (l) => num(l.passing_yards)], ["TD", (l) => num(l.passing_tds)],
+      ["INT", (l) => num(l.interceptions)], ["Sacks", (l) => num(l.sacks_suffered)],
+    ],
+  },
+  rush: {
+    label: "Course",
+    has: (t) => (t.carries || 0) > 0,
+    cols: [
+      ["Courses", (l) => num(l.carries)], ["Yds", (l) => num(l.rushing_yards)],
+      ["Moy.", (l) => (l.carries ? num((l.rushing_yards || 0) / l.carries) : "—")], ["TD", (l) => num(l.rushing_tds)],
+    ],
+  },
+  rec: {
+    label: "Réception",
+    has: (t) => (t.targets || 0) > 0 || (t.receptions || 0) > 0,
+    cols: [
+      ["Cibles", (l) => num(l.targets)], ["Réc.", (l) => num(l.receptions)],
+      ["Yds", (l) => num(l.receiving_yards)], ["TD", (l) => num(l.receiving_tds)],
+    ],
+  },
+  def: {
+    label: "Défense",
+    has: (t) => (t.tackles || 0) > 0 || (t.sacks || 0) > 0 || (t.def_interceptions || 0) > 0 || (t.passes_defended || 0) > 0,
+    cols: [
+      ["Plaq.", (l) => num(l.tackles)], ["Sacks", (l) => num(l.sacks)], ["TFL", (l) => num(l.tackles_for_loss)],
+      ["QB hits", (l) => num(l.qb_hits)], ["INT", (l) => num(l.def_interceptions)],
+      ["PD", (l) => num(l.passes_defended)], ["FF", (l) => num(l.fumbles_forced)],
+    ],
+  },
+};
+
+// Catégories pertinentes selon le poste : un QB qui plaque après une
+// interception n'a pas besoin d'une section « Défense », et inversement.
+function categoryOrder(position) {
+  if (position === "QB") return ["pass", "rush", "rec"];
+  if (position === "RB" || position === "FB") return ["rush", "rec", "pass"];
+  if (position === "WR" || position === "TE") return ["rec", "rush", "pass"];
+  if (!position) return ["pass", "rush", "rec", "def"];
+  return ["def"];
+}
+
+async function renderPlayer(playerId) {
+  setNav(null);
+  setMessage("Chargement…");
+  const seq = state.routeSeq;
+  let p;
+  try {
+    p = await api(`/api/players/${encodeURIComponent(playerId)}`);
+  } catch (err) {
+    if (seq === state.routeSeq) setMessage(err.status === 404 ? "Joueur introuvable." : `Erreur : ${err.message}`, true);
+    return;
+  }
+  if (seq !== state.routeSeq) return;
+  document.title = `${p.name} — NFL Gameday`;
+
+  const cats = categoryOrder(p.position).filter((c) => CATEGORIES[c].has(p.totals));
+  const logCats = cats.slice(0, 2); // le journal de matchs garde les deux catégories principales
+  const teams = p.teams.map((t) => esc(teamName(t))).join(", ");
+
+  const totals = cats.map((c) => `
+    <div class="totals-group">
+      <h3 class="kp-sub">${CATEGORIES[c].label}</h3>
+      ${statCells(CATEGORIES[c].cols.map(([k, f]) => [k, f(p.totals)]))}
+    </div>`).join("");
+
+  const groupHead = logCats.map((c) => `<th scope="colgroup" colspan="${CATEGORIES[c].cols.length}">${CATEGORIES[c].label}</th>`).join("");
+  const colHead = logCats.flatMap((c) => CATEGORIES[c].cols.map(([k], i) => `<th scope="col"${i === 0 ? ' class="grp-start"' : ""}>${k}</th>`)).join("");
+  const rows = p.games.map((g) => {
+    const res = g.result ? `${g.result} ${dash(g.team_score)}-${dash(g.opponent_score)}` : "—";
+    const cells = logCats.flatMap((c) => CATEGORIES[c].cols.map(([, f], i) => `<td${i === 0 ? ' class="grp-start"' : ""}>${f(g.line)}</td>`)).join("");
+    return `
+      <tr>
+        <th scope="row"><a href="#/game/${esc(g.game_id)}">${esc(g.week_label.replace("Week ", "S"))}</a></th>
+        <td class="gl-opp">${g.home ? "vs" : "@"} ${esc(g.opponent)}</td>
+        <td class="gl-res is-${g.result || "none"}">${res}</td>
+        ${cells}
+      </tr>`;
+  }).join("");
+
+  view.innerHTML = `
+    <button type="button" class="back link-plain" onclick="history.length > 1 ? history.back() : (location.hash = '#/')">← Retour</button>
+    <header class="player-head">
+      ${p.headshot_url ? `<img class="headshot headshot-lg" src="${esc(p.headshot_url)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
+      <div>
+        <h1 class="page-title player-name">${esc(p.name)}</h1>
+        <p class="page-sub">${[esc(p.position || ""), teams, `${p.games_played} match${p.games_played > 1 ? "s" : ""}`].filter(Boolean).join(" · ")}</p>
+      </div>
+    </header>
+    <section class="block">
+      <h2 class="section-title">Saison ${state.meta.season}</h2>
+      ${totals || `<p class="state-msg">Aucune stat enregistrée.</p>`}
+    </section>
+    <section class="block">
+      <h2 class="section-title">Match par match</h2>
+      <div class="table-scroll">
+        <table class="game-log">
+          <thead>
+            <tr class="grp-row"><th colspan="3"></th>${groupHead}</tr>
+            <tr><th scope="col">Sem.</th><th scope="col">Adv.</th><th scope="col">Rés.</th>${colHead}</tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
 // --- Routage ----------------------------------------------------------
 async function route() {
   state.routeSeq += 1;
@@ -478,6 +659,8 @@ async function route() {
   const [page, arg] = parts;
   if (page === "week" && /^\d+$/.test(arg || "")) return renderWeek(Number(arg));
   if (page === "game" && arg) return renderGame(decodeURIComponent(arg));
+  if (page === "standings") return renderStandings();
+  if (page === "player" && arg) return renderPlayer(decodeURIComponent(arg));
   return renderWeek(state.meta.current_week ?? 1);
 }
 

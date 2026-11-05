@@ -148,6 +148,56 @@ class Team(BaseModel):
     color2: str | None = None
 
 
+class StandingRow(BaseModel):
+    team: str
+    name: str
+    conference: str
+    division: str
+    wins: int
+    losses: int
+    ties: int
+    pct: float
+    points_for: int
+    points_against: int
+    diff: int
+    div_record: str
+    conf_record: str
+    home_record: str
+    away_record: str
+    streak: str | None = None  # « V3 », « D1 », « N1 »
+
+
+class DivisionStandings(BaseModel):
+    name: str  # « AFC East »
+    conference: str
+    rows: list[StandingRow]
+
+
+class PlayerGame(BaseModel):
+    game_id: str
+    week: int
+    week_label: str
+    team: str
+    opponent: str
+    home: bool
+    result: Literal["V", "D", "N"] | None = None
+    team_score: int | None = None
+    opponent_score: int | None = None
+    line: PlayerLine
+
+
+class PlayerSeason(BaseModel):
+    player_id: str
+    name: str
+    position: str | None = None
+    position_group: str | None = None
+    teams: list[str] = []
+    headshot_url: str | None = None
+    games_played: int = 0
+    totals: PlayerLine
+    games: list[PlayerGame] = []
+
+
 class WeekInfo(BaseModel):
     week: int
     label: str
