@@ -10,6 +10,7 @@ avec l'ancien cache s'il existe et on ne réessaie pas avant 10 minutes.
 """
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
@@ -29,6 +30,11 @@ DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 TTL = timedelta(hours=6)
 RETRY_AFTER_FAILURE = timedelta(minutes=10)
 
+
+# Jeux de données de la saison précédente : figés une fois la saison
+# terminée. S'ils sont déjà en cache, une actualisation les garde au lieu de
+# les retélécharger (moins de réseau, et une Action GitHub plus courte).
+STABLE_DATASETS = ("prev_player_stats", "prev_pfr_def")
 
 DATASETS = ("schedules", "teams", "player_stats", "team_stats", "pfr_def",
             "quarter_scores", "first_downs", "prev_player_stats", "prev_pfr_def",
@@ -118,8 +124,10 @@ def _prev_player_stats(season: int) -> pl.DataFrame:
     return df.select([c for c in PREV_STATS_COLUMNS if c in df.columns])
 
 
-def _download(season: int) -> dict[str, pl.DataFrame]:
-    """Télécharge tous les jeux de données d'une saison via nflreadpy."""
+def _download(season: int, keep: dict[str, pl.DataFrame] | None = None) -> dict[str, pl.DataFrame]:
+    """Télécharge tous les jeux de données d'une saison via nflreadpy.
+    ``keep`` : jeux déjà en cache et figés (STABLE_DATASETS), repris tels quels."""
+    keep = keep or {}
     pbp = nfl.load_pbp([season])
     schedules = nfl.load_schedules([season])
     # load_teams contient aussi d'anciennes franchises (OAK, SD, STL…) :
@@ -136,8 +144,8 @@ def _download(season: int) -> dict[str, pl.DataFrame]:
         "pfr_def": _pfr_pressures(season, ids),
         "quarter_scores": derive.quarter_scores(pbp),
         "first_downs": derive.first_downs(pbp),
-        "prev_player_stats": _prev_player_stats(season),
-        "prev_pfr_def": _pfr_pressures(season - 1, ids),
+        "prev_player_stats": keep["prev_player_stats"] if "prev_player_stats" in keep else _prev_player_stats(season),
+        "prev_pfr_def": keep["prev_pfr_def"] if "prev_pfr_def" in keep else _pfr_pressures(season - 1, ids),
         "snap_counts": _snap_counts(season),
         "players": players,
     }
@@ -187,9 +195,13 @@ class SeasonCache:
 
     # --- Rafraîchissement ------------------------------------------------
     def refresh(self) -> dict:
-        """Retélécharge tout, écrit les Parquet de façon atomique, renvoie meta."""
+        """Retélécharge tout (sauf les jeux figés déjà en cache), écrit les
+        Parquet de façon atomique, renvoie meta."""
         with self._lock:
-            frames = self._downloader(self.season)
+            if "keep" in inspect.signature(self._downloader).parameters:
+                frames = self._downloader(self.season, keep=self._stable_frames())
+            else:
+                frames = self._downloader(self.season)
             self.dir.mkdir(parents=True, exist_ok=True)
             for name, df in frames.items():
                 tmp = self.dir / f"{name}.parquet.tmp"
@@ -208,6 +220,20 @@ class SeasonCache:
             self._last_failure = None
             log.info("Cache %s rafraîchi : %s", self.season, meta["rows"])
             return meta
+
+    def _stable_frames(self) -> dict[str, pl.DataFrame]:
+        """Jeux figés (saison précédente) déjà en cache et non vides."""
+        out = {}
+        for name in STABLE_DATASETS:
+            path = self.dir / f"{name}.parquet"
+            if path.exists():
+                try:
+                    df = pl.read_parquet(path)
+                except Exception:  # noqa: BLE001 — fichier abîmé : on retélécharge
+                    continue
+                if df.height:
+                    out[name] = df
+        return out
 
     def ensure_fresh(self) -> None:
         if not self.is_stale():

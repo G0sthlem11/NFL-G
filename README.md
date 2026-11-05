@@ -15,7 +15,7 @@ Les données viennent de [nflverse](https://github.com/nflverse), via le package
 | | Mode local | Mode statique (en ligne) |
 |---|---|---|
 | Lancement | `py -m uvicorn app.main:app --reload` | Site sur Vercel, accès réservé à ton compte |
-| Données | API FastAPI (`/api/...`), cache local rafraîchi toutes les 6 h | Fichiers JSON (`/data/....json`) régénérés toutes les 6 h par une GitHub Action |
+| Données | API FastAPI (`/api/...`), cache local rafraîchi toutes les 6 h | Fichiers JSON (`/data/....json`) régénérés par une GitHub Action, chaque lendemain de matchs |
 | Bouton « Actualiser » | Oui | Non : à la place, la mention « Données du [date, heure] » |
 | Usage | Développement | Consultation depuis n'importe où (PC, téléphone) |
 
@@ -140,14 +140,16 @@ py -m scripts.check_key_players 2026_08_CAR_GB
 ### Comment ça marche
 
 Le fichier `.github/workflows/deploy.yml` est une GitHub Action. Elle se déclenche dans trois cas :
-- toutes les 6 h (à 00:17, 06:17, 12:17 et 18:17 UTC) ;
-- à chaque push sur `main` ;
-- à la demande, depuis l'onglet Actions.
+- une fois par jour à 08:17 UTC (09:17 à Paris l'hiver), seulement les lendemains de matchs (dimanche, lundi, mardi, vendredi) et seulement de septembre à février ;
+- à chaque push sur `main`, sauf si seuls des fichiers `.md` ou `scripts/` changent. Le push réutilise les données en cache si elles ont moins de 6 h ;
+- à la demande, depuis l'onglet Actions (**Run workflow**), avec ou sans retéléchargement des données.
+
+Consommation : environ 3 minutes par exécution, soit **une centaine de minutes par mois** en saison (quota gratuit d'un dépôt privé : 2 000). Les dépendances pip, les paquets npm de la CLI Vercel et les données nflverse sont en cache entre deux exécutions ; la saison précédente, figée, n'est jamais retéléchargée. Une exécution bloquée s'arrête au bout de 15 minutes, et une nouvelle exécution annule celle en cours.
 
 À chaque exécution, elle enchaîne ces étapes :
 
 1. Installer Python 3.13 et les dépendances.
-2. Lancer `python -m app.export --refresh`, qui télécharge les données nflverse et génère `dist/`. **Si nflverse est injoignable, le workflow s'arrête ici** et le site garde sa version précédente.
+2. Lancer `python -m app.export --refresh` (sans `--refresh` sur un push), qui télécharge les données nflverse et génère `dist/`. **Si nflverse est injoignable, le workflow s'arrête ici** et le site garde sa version précédente.
 3. Lancer les tests Python, puis ceux du middleware de protection (`node --test`). S'ils échouent, rien n'est déployé.
 4. Comparer l'empreinte des données à celle du dernier déploiement. Si rien n'a changé et que l'exécution est planifiée, le déploiement est sauté. Un push ou un lancement manuel déploie toujours.
 5. Déployer `dist/` en production avec la CLI Vercel (`vercel pull`, `vercel build`, `vercel deploy --prebuilt --prod`).
@@ -259,7 +261,7 @@ C'est `middleware.js`, un Routing Middleware Vercel, qui protège le site en lig
 
 ### Limites de la version en ligne
 
-- **Fraîcheur des données** : il faut compter jusqu'à **6 h de délai en plus** de celui de nflverse, qui publie quelques heures après les matchs. GitHub peut aussi retarder les exécutions planifiées de quelques minutes, parfois davantage. Pour forcer une mise à jour, lance le workflow à la main.
+- **Fraîcheur des données** : les stats d'un match arrivent le lendemain matin (exécution de 08:17 UTC), à condition que nflverse les ait publiées ; sinon, à l'exécution suivante. GitHub peut aussi retarder les exécutions planifiées de quelques minutes, parfois davantage. Pour forcer une mise à jour, lance le workflow à la main.
 - **Minutes GitHub Actions** : une exécution dure environ 4 à 5 minutes, soit environ 500 minutes par mois. Le quota gratuit d'un dépôt privé est de 2 000 minutes par mois.
 - **Token Vercel** : à son expiration, les déploiements échouent et le site reste sur sa dernière version. Il suffit alors de recréer le token et de mettre à jour le secret `VERCEL_TOKEN`.
 - **Niveau de protection** : un mot de passe unique protège moins bien qu'un compte Vercel avec double authentification. Pour des statistiques NFL publiques, c'est un compromis acceptable. Garde le mot de passe pour toi seul, et change `SESSION_SECRET` en cas de doute.

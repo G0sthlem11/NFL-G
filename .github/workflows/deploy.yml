@@ -1,10 +1,21 @@
 # Régénère les données (export statique) et déploie dist/ en production sur Vercel.
 #
-# Déclencheurs : toutes les 6 h, à chaque push sur main, et à la main (onglet Actions).
-# Sur les exécutions planifiées, le déploiement est sauté si les données n'ont pas
-# changé depuis le dernier déploiement (empreinte de dist/data/ gardée en cache).
-# Si le téléchargement nflverse ou les tests échouent, rien n'est déployé : le site
-# garde sa version précédente.
+# Déclencheurs (sobres, pour rester très loin du quota gratuit d'Actions) :
+#   - planifié : une fois par jour à 08:17 UTC (09:17 à Paris l'hiver, 10:17
+#     l'été), seulement les lendemains de matchs (dimanche, lundi, mardi,
+#     vendredi) et seulement de septembre à février. Hors saison : aucune
+#     exécution planifiée. L'heure laisse à nflverse le temps de publier les
+#     stats du match de la nuit (Thursday/Sunday/Monday Night Football).
+#   - push sur main, sauf si seuls la documentation ou les scripts changent ;
+#     les données en cache (moins de 6 h) sont alors réutilisées, sans
+#     retéléchargement.
+#   - à la main : onglet Actions > Déploiement Vercel > Run workflow, avec ou
+#     sans retéléchargement des données.
+#
+# Planifié et données inchangées depuis le dernier déploiement : pas de
+# déploiement (empreinte de dist/data/ gardée en cache). Si le téléchargement
+# nflverse ou les tests échouent, rien n'est déployé : le site garde sa
+# version précédente.
 #
 # Secrets requis (Settings > Secrets and variables > Actions) :
 #   VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
@@ -13,23 +24,34 @@ name: Déploiement Vercel
 
 on:
   schedule:
-    - cron: "17 */6 * * *"  # 00:17, 06:17, 12:17, 18:17 UTC (décalé de l'heure pile, plus chargée)
+    # minute heure jour mois jour-de-semaine (0 = dimanche)
+    - cron: "17 8 * 1,2,9-12 0,1,2,5"
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "scripts/**"
+      - ".gitignore"
   workflow_dispatch:
+    inputs:
+      refresh:
+        description: "Retélécharger les données nflverse"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
-# Jamais deux déploiements en parallèle ; un déploiement en cours n'est pas interrompu.
+# Une seule exécution à la fois : une nouvelle annule celle en cours (le
+# dernier état de main l'emporte, et on ne paie pas deux fois le même travail).
 concurrency:
   group: deploy-production
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -46,14 +68,42 @@ jobs:
           cache-dependency-path: requirements.txt
 
       - name: Installer les dépendances
-        run: python -m pip install -r requirements.txt
+        timeout-minutes: 5
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
 
-      # --refresh : téléchargement nflverse forcé ; en cas d'échec, l'étape échoue
-      # et le workflow s'arrête ici, sans déployer.
+      # Cache local des données (data/) de la dernière exécution : la saison
+      # précédente n'est jamais retéléchargée, et un push réutilise des données
+      # de moins de 6 h.
+      - name: Restaurer les données en cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: nflverse-data-${{ github.run_id }}
+          restore-keys: nflverse-data-
+
+      # Planifié, ou manuel avec « Retélécharger » : téléchargement forcé ; en
+      # cas d'échec, l'étape échoue et rien n'est déployé.
+      # Push : cache réutilisé s'il a moins de 6 h, sinon téléchargement.
       - name: Exporter le site statique
-        run: python -m app.export --refresh --out dist --hash-file data-hash.txt
+        timeout-minutes: 10
+        env:
+          EVENT: ${{ github.event_name }}
+          REFRESH_INPUT: ${{ inputs.refresh }}
+        run: |
+          if [ "$EVENT" = "push" ] || { [ "$EVENT" = "workflow_dispatch" ] && [ "$REFRESH_INPUT" = "false" ]; }; then
+            python -m app.export --out dist --hash-file data-hash.txt
+          else
+            python -m app.export --refresh --out dist --hash-file data-hash.txt
+          fi
+
+      - name: Sauvegarder les données en cache
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: nflverse-data-${{ github.run_id }}
 
       - name: Tests
+        timeout-minutes: 5
         run: python -m pytest -q
 
       - name: Installer Node.js
@@ -63,6 +113,7 @@ jobs:
 
       # Middleware de protection (mot de passe, cookie signé) : aucun déploiement s'il échoue.
       - name: Tests du middleware
+        timeout-minutes: 2
         run: node --test "tests/js/*.test.js"
 
       - name: Récupérer l'empreinte du dernier déploiement
@@ -76,36 +127,54 @@ jobs:
         id: decide
         env:
           HAS_TOKEN: ${{ secrets.VERCEL_TOKEN != '' && secrets.VERCEL_ORG_ID != '' && secrets.VERCEL_PROJECT_ID != '' }}
+          EVENT: ${{ github.event_name }}
         run: |
           new=$(cat data-hash.txt)
           old=$(cat .last-deploy/hash 2>/dev/null || echo "aucune")
           echo "Empreinte actuelle : $new"
           echo "Dernier déploiement : $old"
+          echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
           if [ "$HAS_TOKEN" != "true" ]; then
             echo "deploy=false" >> "$GITHUB_OUTPUT"
             echo "::warning::Secrets Vercel absents (VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID) : export et tests OK, déploiement sauté."
             echo "Secrets Vercel absents : déploiement sauté (voir README, section Déploiement)." >> "$GITHUB_STEP_SUMMARY"
-          elif [ "${{ github.event_name }}" = "schedule" ] && [ "$new" = "$old" ]; then
+          elif [ "$EVENT" = "schedule" ] && [ "$new" = "$old" ]; then
             echo "deploy=false" >> "$GITHUB_OUTPUT"
             echo "Données inchangées depuis le dernier déploiement : déploiement sauté." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "deploy=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # Paquets npm de la CLI Vercel en cache (renouvelé chaque mois pour
+      # suivre les nouvelles versions).
+      - name: Cache npm de la CLI Vercel
+        if: steps.decide.outputs.deploy == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-vercel-${{ runner.os }}-${{ steps.decide.outputs.month }}
+          restore-keys: npm-vercel-${{ runner.os }}-
+
       - name: Installer la CLI Vercel
         if: steps.decide.outputs.deploy == 'true'
-        run: npm install --global vercel@latest
+        timeout-minutes: 3
+        run: npm install --global --prefer-offline --no-audit --no-fund vercel@latest
 
       - name: Récupérer la configuration du projet Vercel
         if: steps.decide.outputs.deploy == 'true'
+        timeout-minutes: 2
         run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
 
       - name: Construire (copie de dist/)
         if: steps.decide.outputs.deploy == 'true'
+        timeout-minutes: 3
         run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
 
+      # Vercel n'envoie que les fichiers qui ont changé (dédoublonnage par
+      # empreinte) : un export complet ne coûte donc pas un envoi complet.
       - name: Déployer en production
         if: steps.decide.outputs.deploy == 'true'
+        timeout-minutes: 5
         run: |
           url=$(vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}")
           echo "Déployé : $url" >> "$GITHUB_STEP_SUMMARY"

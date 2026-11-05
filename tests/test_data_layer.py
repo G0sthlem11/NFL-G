@@ -122,3 +122,19 @@ def test_cache_without_data_and_offline_raises(tmp_path):
 
     with pytest.raises(ConnectionError):
         SeasonCache(2026, data_dir=tmp_path, downloader=broken).get("schedules")
+
+
+def test_refresh_keeps_previous_season_already_cached(tmp_path):
+    # Saison précédente figée : téléchargée une fois, puis reprise du cache.
+    seen = []
+
+    def dl(season, keep=None):
+        seen.append(sorted(keep or {}))
+        prev = (keep or {}).get("prev_player_stats", pl.DataFrame({"player_id": ["P1"]}))
+        return {"schedules": pl.DataFrame({"game_id": ["G"], "week": [1]}), "prev_player_stats": prev}
+
+    c = SeasonCache(2026, data_dir=tmp_path, downloader=dl, datasets=("schedules", "prev_player_stats"))
+    c.refresh()
+    c.refresh()
+    assert seen == [[], ["prev_player_stats"]]
+    assert c.get("prev_player_stats")["player_id"].to_list() == ["P1"]
