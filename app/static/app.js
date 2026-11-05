@@ -26,8 +26,22 @@ const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const dash = (v) => (v === null || v === undefined || v === "" ? "—" : esc(v));
 const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// Mode de données, fixé par config.js : "api" (FastAPI, en local) ou
+// "static" (export dist/, déployé sur Vercel). Rien à régler à la main.
+const MODE = window.GAMEDAY_CONFIG?.mode === "static" ? "static" : "api";
+
+// Seul point d'accès réseau du front. En statique, /api/weeks/8 devient
+// /data/weeks/8.json (arborescence miroir produite par py -m app.export).
+function dataUrl(path) {
+  if (MODE === "api") return path;
+  return `/data/${path.replace(/^\/api\//, "")}.json`;
+}
+
 async function api(path, options) {
-  const res = await fetch(path, options);
+  if (MODE === "static" && options?.method && options.method !== "GET") {
+    throw new Error("Action indisponible dans la version statique");
+  }
+  const res = await fetch(dataUrl(path), options);
   if (!res.ok) {
     let detail = res.statusText;
     try { detail = (await res.json()).detail || detail; } catch { /* corps non JSON */ }
@@ -69,6 +83,13 @@ function renderMasthead() {
   const m = state.meta;
   document.getElementById("season").textContent = m ? `Saison ${m.season}` : "";
   const updated = document.getElementById("updated");
+  if (MODE === "static") {
+    // Version statique : pas d'actualisation à la demande, on date les données.
+    const stamp = m?.fetched_at || m?.generated_at;
+    updated.textContent = stamp ? `Données du ${fmtDataDate.format(new Date(stamp))}` : "";
+    updated.title = m?.generated_at ? `Site généré le ${fmtDataDate.format(new Date(m.generated_at))}` : "";
+    return;
+  }
   if (m?.fetched_at) {
     const d = new Date(m.fetched_at);
     updated.textContent = `Mis à jour ${relativeTime(d)}`;
@@ -78,6 +99,9 @@ function renderMasthead() {
   }
 }
 
+const fmtDataDate = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+if (MODE === "static") document.getElementById("refresh").remove();
+
 async function loadMeta() {
   const [meta, teams] = await Promise.all([api("/api/meta"), api("/api/teams")]);
   state.meta = meta;
@@ -85,7 +109,7 @@ async function loadMeta() {
   renderMasthead();
 }
 
-document.getElementById("refresh").addEventListener("click", async (e) => {
+document.getElementById("refresh")?.addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
   btn.textContent = "Actualisation…";
