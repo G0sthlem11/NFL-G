@@ -15,6 +15,14 @@
       "headers": [{ "key": "Cache-Control", "value": "private, max-age=31536000, immutable" }]
     },
     {
+      "source": "/anim.js",
+      "headers": [{ "key": "Cache-Control", "value": "private, max-age=31536000, immutable" }]
+    },
+    {
+      "source": "/vendor/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "private, max-age=31536000, immutable" }]
+    },
+    {
       "source": "/config.js",
       "headers": [{ "key": "Cache-Control", "value": "private, max-age=31536000, immutable" }]
     },

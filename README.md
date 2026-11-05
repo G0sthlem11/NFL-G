@@ -289,6 +289,8 @@ app/
     standings.py     classement
     repository.py    accès aux données normalisées
   static/            front HTML/CSS/JS vanilla (routage par #)
+    anim.js          animations discrètes (fondus, cascade, compteurs), coupées si prefers-reduced-motion
+    vendor/motion.js Motion 14.4.0 (https://motion.dev, MIT), copie locale
 scripts/             exploration des données et contrôles
 tests/               pytest et jeux d'exemple (fixtures/)
 vercel.json          configuration Vercel (sert dist/, en-têtes de cache)

@@ -52,6 +52,22 @@ table, .num, .score { font-variant-numeric: tabular-nums lining-nums; }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* --- Mouvement ------------------------------------------------------- */
+/* Survols : changements de couleur et de soulignement en fondu (200 ms).
+   Les animations d'apparition et les compteurs sont dans anim.js (Motion). */
+a, button, .abbr, .score {
+  transition: color 0.2s ease, text-decoration-color 0.2s ease, border-color 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* --- En-tête -------------------------------------------------------- */
 .masthead,
 main,
@@ -225,7 +241,13 @@ main:focus { outline: none; }
   text-decoration: none;
 }
 
-.game:hover .abbr { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+.game .abbr {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  text-decoration-color: transparent;
+}
+.game:hover .abbr { text-decoration-color: currentColor; }
 
 .game-status {
   display: flex;
@@ -475,8 +497,13 @@ td { text-align: right; }
 .bp-pos { font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: 0.04em; }
 .bp-what { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink-2); }
 
-.player-link { text-decoration: none; }
-.player-link:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.player-link {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: transparent;
+}
+.player-link:hover { text-decoration-color: currentColor; }
 
 .visually-hidden {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
@@ -549,8 +576,8 @@ td { text-align: right; }
 .game-log .grp-row th { text-align: left; padding-bottom: 2px; letter-spacing: 0.06em; text-transform: uppercase; padding-left: 28px; }
 .game-log thead tr:last-child th:nth-child(-n+3) { text-align: left; }
 .game-log tbody th { text-align: left; }
-.game-log tbody th a { text-decoration: none; color: var(--ink); }
-.game-log tbody th a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.game-log tbody th a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: transparent; }
+.game-log tbody th a:hover { text-decoration-color: currentColor; }
 .game-log tbody tr { border-bottom: 1px solid var(--rule); }
 .game-log td { color: var(--ink-2); }
 .game-log .gl-opp, .game-log .gl-res { text-align: left; }

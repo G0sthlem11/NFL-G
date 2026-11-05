@@ -73,8 +73,20 @@ function weekLabel(week) {
   return p ? p.label : `Week ${week}`;
 }
 
+// Animations (anim.js, avec Motion) : facultatives, l'app marche sans.
+const anim = window.GamedayAnim || { leave: async () => {}, enter: () => {} };
+
+// Rendu final d'une page (ou d'une erreur) : contenu puis animation d'entrée.
+// Les messages « Chargement… » intermédiaires n'utilisent pas paint().
+function paint(html) {
+  view.innerHTML = html;
+  anim.enter(view);
+}
+
 function setMessage(text, isError = false) {
-  view.innerHTML = `<p class="state-msg${isError ? " is-error" : ""}">${esc(text)}</p>`;
+  const html = `<p class="state-msg${isError ? " is-error" : ""}">${esc(text)}</p>`;
+  if (isError) paint(html);
+  else view.innerHTML = html;
 }
 
 function setNav(name) {
@@ -259,7 +271,7 @@ async function renderWeek(week) {
     ${weekStrip(week)}`;
 
   if (!info) {
-    view.innerHTML = head + `<p class="state-msg">Cette semaine n'est pas encore au calendrier.</p>`;
+    paint(head + `<p class="state-msg">Cette semaine n'est pas encore au calendrier.</p>`);
     return;
   }
 
@@ -271,7 +283,7 @@ async function renderWeek(week) {
     games = await api(`/api/weeks/${week}`);
   } catch (err) {
     if (seq !== state.routeSeq) return;
-    view.innerHTML = head + `<p class="state-msg is-error">Impossible de charger la semaine : ${esc(err.message)}</p>`;
+    paint(head + `<p class="state-msg is-error">Impossible de charger la semaine : ${esc(err.message)}</p>`);
     return;
   }
   if (seq !== state.routeSeq) return; // l'utilisateur a changé de page entre-temps
@@ -286,7 +298,7 @@ async function renderWeek(week) {
   const byesHtml = week <= 18 && byes.length
     ? `<p class="byes">Exemptes : ${byes.map(esc).join(", ")}</p>` : "";
 
-  view.innerHTML = head + days + byesHtml;
+  paint(head + days + byesHtml);
   scrollStripToCurrent();
 }
 
@@ -509,10 +521,10 @@ async function renderGame(gameId) {
          <div class="kp-grid">${keyPlayersColumn(g.away_team, d.away_key)}${keyPlayersColumn(g.home_team, d.home_key)}</div>
        </section>`
     : "";
-  view.innerHTML = `
+  paint(`
     <a class="back" href="#/week/${g.week}">← ${esc(g.week_label)}</a>
     <header class="game-head">${scoreboard(g)}</header>
-    ${body}`;
+    ${body}`);
 }
 
 // --- Classement -------------------------------------------------------
@@ -573,10 +585,10 @@ async function renderStandings() {
       <h2 class="section-title">${c}</h2>
       ${divisions.filter((d) => d.conference === c).map(standingsTable).join("")}
     </section>`;
-  view.innerHTML = `
+  paint(`
     <div class="page-head"><h1 class="page-title">Classement</h1></div>
     <p class="page-sub">Saison régulière ${state.meta.season}, calculé à partir des résultats. Départage simplifié : confrontations directes, division, conférence, différence de points.</p>
-    ${conf("AFC")}${conf("NFC")}`;
+    ${conf("AFC")}${conf("NFC")}`);
 }
 
 // --- Page joueur --------------------------------------------------------
@@ -665,7 +677,7 @@ async function renderPlayer(playerId) {
       </tr>`;
   }).join("");
 
-  view.innerHTML = `
+  paint(`
     <button type="button" class="back link-plain" onclick="history.length > 1 ? history.back() : (location.hash = '#/')">← Retour</button>
     <header class="player-head">
       ${p.headshot_url ? `<img class="headshot headshot-lg" src="${esc(p.headshot_url)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
@@ -689,7 +701,7 @@ async function renderPlayer(playerId) {
           <tbody>${rows}</tbody>
         </table>
       </div>
-    </section>`;
+    </section>`);
 }
 
 // --- Routage ----------------------------------------------------------
@@ -717,9 +729,10 @@ document.addEventListener("keydown", (e) => {
   if (i >= 0 && j >= 0 && j < weeks.length) location.hash = `#/week/${weeks[j]}`;
 });
 
-window.addEventListener("hashchange", () => {
-  route();
+window.addEventListener("hashchange", async () => {
+  await anim.leave(view); // fondu sortant bref, puis nouvelle page
   window.scrollTo(0, 0);
+  route();
 });
 
 (async function init() {
