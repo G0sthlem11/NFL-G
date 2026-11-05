@@ -42,6 +42,12 @@ async function api(path, options) {
     throw new Error("Action indisponible dans la version statique");
   }
   const res = await fetch(dataUrl(path), options);
+  if (res.status === 401 && MODE === "static") {
+    // Session absente ou expirée (protection du site en ligne) : page de
+    // connexion, en gardant la page demandée (#/game/...) pour y revenir après.
+    location.replace(`/login?next=${encodeURIComponent(location.pathname + location.search)}${location.hash}`);
+    return new Promise(() => {}); // la page va changer : on n'affiche pas d'erreur
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try { detail = (await res.json()).detail || detail; } catch { /* corps non JSON */ }
@@ -100,7 +106,15 @@ function renderMasthead() {
 }
 
 const fmtDataDate = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
-if (MODE === "static") document.getElementById("refresh").remove();
+if (MODE === "static") {
+  document.getElementById("refresh").remove();
+  // Version en ligne (protégée par mot de passe) : lien discret de déconnexion.
+  const out = document.createElement("a");
+  out.href = "/logout";
+  out.className = "logout";
+  out.textContent = "Se déconnecter";
+  document.querySelector(".colophon p")?.append(" ", out);
+}
 
 async function loadMeta() {
   const [meta, teams] = await Promise.all([api("/api/meta"), api("/api/teams")]);

@@ -144,7 +144,7 @@ Le fichier `.github/workflows/deploy.yml` est une GitHub Action. Elle se déclen
 
 1. Installer Python 3.13 et les dépendances.
 2. Lancer `python -m app.export --refresh`, qui télécharge les données nflverse et génère `dist/`. **Si nflverse est injoignable, le workflow s'arrête ici** et le site garde sa version précédente.
-3. Lancer les tests. S'ils échouent, rien n'est déployé.
+3. Lancer les tests Python, puis ceux du middleware de protection (`node --test`). S'ils échouent, rien n'est déployé.
 4. Comparer l'empreinte des données à celle du dernier déploiement. Si rien n'a changé et que l'exécution est planifiée, le déploiement est sauté. Un push ou un lancement manuel déploie toujours.
 5. Déployer `dist/` en production avec la CLI Vercel (`vercel pull`, `vercel build`, `vercel deploy --prebuilt --prod`).
 
@@ -189,28 +189,76 @@ Ces étapes se font une seule fois, dans ton navigateur.
 
 Tant que ces secrets manquent, l'Action fait l'export et les tests, puis saute le déploiement avec un avertissement (pas d'échec).
 
-**4. Rendre le site privé**
+**4. Créer le mot de passe et la clé de session**
+
+Le site est protégé par un mot de passe, vérifié par `middleware.js` (voir « Protection du site » plus bas). Il lit deux variables d'environnement Vercel. **Elles ne doivent jamais apparaître dans le code ni dans le dépôt.**
+
+1. Génère les deux valeurs sur ton PC, dans PowerShell. Chaque commande affiche une valeur aléatoire à copier :
+
+   ```powershell
+   # Mot de passe (24 caractères) : à garder dans ton gestionnaire de mots de passe
+   $b = New-Object byte[] 18; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
+   # Clé de session (64 caractères) : tu n'en auras plus besoin après l'avoir collée dans Vercel
+   $b = New-Object byte[] 48; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
+   ```
+
+2. Dans le projet Vercel, ouvre **Settings → Environment Variables**. Ajoute les deux variables, en cochant au moins l'environnement **Production** :
+
+   | Key | Value |
+   |---|---|
+   | `APP_PASSWORD` | le mot de passe (12 caractères minimum) |
+   | `SESSION_SECRET` | la clé de session (32 caractères minimum) |
+
+   Si tu le peux, coche **Sensitive** : la valeur ne sera plus affichée.
+
+3. Une variable ajoutée ou modifiée ne prend effet **qu'au déploiement suivant**. Relance le workflow depuis l'onglet Actions.
+
+Tant qu'une variable manque ou est trop courte, le site refuse tout avec une erreur 503, sauf les icônes. Il ne s'ouvre jamais par défaut.
+
+**5. Régler la protection Vercel**
 
 1. Dans le projet Vercel, ouvre **Settings → Deployment Protection**.
-2. Active **Vercel Authentication**.
-3. Choisis la portée **All Deployments**, et non « Standard Protection », qui laisse l'URL de production publique.
-4. Clique sur **Save**.
+2. Laisse **Vercel Authentication** activé, mais choisis la portée **Standard Protection** au lieu de « All Deployments ».
+3. Clique sur **Save**.
 
-Avec cette portée, **toutes** les adresses demandent une connexion à ton compte Vercel, y compris l'URL de production. C'est disponible sur le plan Hobby, sans option payante.
+Avec ce réglage :
+- l'adresse de production (`nfl-g.vercel.app`) est protégée par ton mot de passe, ce qui permet à Chrome et à Google de récupérer le manifeste et les icônes ;
+- les adresses techniques de chaque déploiement (`nfl-g-xxxx.vercel.app`) restent derrière la connexion Vercel.
 
-**5. Premier déploiement et vérification**
+**6. Premier déploiement et vérification**
 
 1. Sur GitHub, va dans l'onglet **Actions**, choisis **Déploiement Vercel**, puis **Run workflow → main → Run workflow**.
 2. Attends la coche verte, environ 4 à 5 minutes. Le résumé de l'exécution affiche l'URL déployée.
-3. Dans Vercel, ton adresse de production apparaît dans **Project → Domains**, sous la forme `<nom>.vercel.app`.
-4. Ouvre cette adresse dans une **fenêtre de navigation privée**. Tu dois tomber sur la page de connexion Vercel, et non sur le site. Connecte-toi : le site s'affiche.
-5. Sur ton téléphone, connecte-toi une fois à Vercel dans le navigateur, puis ajoute le site à l'écran d'accueil.
+3. Ouvre <https://nfl-g.vercel.app> dans une **fenêtre de navigation privée** : la page « Accès privé » de Gameday doit s'afficher. Saisis le mot de passe : le site s'affiche.
+4. Sur ton téléphone, ouvre le site dans Chrome et connecte-toi. Choisis ensuite **⋮ → Installer l'application** (ou « Ajouter à l'écran d'accueil » puis « Installer »). L'app s'ouvre alors en plein écran. La session dure un an.
+
+Pour contrôler la protection depuis un terminal, sans session :
+
+```powershell
+curl.exe -s -o NUL -w "%{http_code} %{redirect_url}`n" https://nfl-g.vercel.app/              # 302 vers /login
+curl.exe -s -o NUL -w "%{http_code}`n" https://nfl-g.vercel.app/data/meta.json                # 401
+curl.exe -s -o NUL -w "%{http_code} %{content_type}`n" https://nfl-g.vercel.app/icon-512.png  # 200 image/png
+```
+
+### Protection du site
+
+C'est `middleware.js`, un Routing Middleware Vercel, qui protège le site en ligne. Il s'exécute avant chaque requête, sans aucune dépendance.
+
+- **Accessibles sans connexion** : uniquement `manifest.webmanifest`, les quatre icônes PNG, `favicon.svg` et la page `/login`. C'est ce qu'il faut à Chrome, et aux serveurs de Google, pour créer l'application installable sur Android.
+- **Tout le reste exige un cookie de session valide**, y compris `/data/*.json`. Sans cookie, les pages renvoient vers `/login` et les données répondent 401 ; le front renvoie alors vers la connexion, puis ramène sur la page demandée.
+- **Cookie `gd_session`** : signé en HMAC-SHA256 avec `SESSION_SECRET`, `HttpOnly`, `Secure`, `SameSite=Lax`, valable **un an**.
+  - Le lien « Se déconnecter », en pied de page, efface le cookie de l'appareil.
+  - **Changer `SESSION_SECRET` puis redéployer déconnecte tous les appareils.**
+- **Essais en boucle** : chaque échec ajoute un délai d'environ 1,5 s. Au-delà de 5 échecs en 15 minutes depuis une même adresse IP, la connexion est refusée (429). Ce compteur vit dans la mémoire de chaque instance du middleware et n'est pas partagé. **La vraie protection reste un mot de passe long et aléatoire**, d'où la commande de génération ci-dessus.
+- **Tests** : `node --test "tests/js/*.test.js"` (Node 22).
+- **Mode local** : le middleware ne sert que sur Vercel. Le mode local avec FastAPI n'est pas protégé, et n'a pas besoin de l'être.
 
 ### Limites de la version en ligne
 
 - **Fraîcheur des données** : il faut compter jusqu'à **6 h de délai en plus** de celui de nflverse, qui publie quelques heures après les matchs. GitHub peut aussi retarder les exécutions planifiées de quelques minutes, parfois davantage. Pour forcer une mise à jour, lance le workflow à la main.
 - **Minutes GitHub Actions** : une exécution dure environ 4 à 5 minutes, soit environ 500 minutes par mois. Le quota gratuit d'un dépôt privé est de 2 000 minutes par mois.
 - **Token Vercel** : à son expiration, les déploiements échouent et le site reste sur sa dernière version. Il suffit alors de recréer le token et de mettre à jour le secret `VERCEL_TOKEN`.
+- **Niveau de protection** : un mot de passe unique protège moins bien qu'un compte Vercel avec double authentification. Pour des statistiques NFL publiques, c'est un compromis acceptable. Garde le mot de passe pour toi seul, et change `SESSION_SECRET` en cas de doute.
 
 ## Comment sont choisis les joueurs clés
 
@@ -244,6 +292,8 @@ app/
 scripts/             exploration des données et contrôles
 tests/               pytest et jeux d'exemple (fixtures/)
 vercel.json          configuration Vercel (sert dist/, en-têtes de cache)
+middleware.js        protection par mot de passe du site en ligne (Routing Middleware)
+package.json         déclare middleware.js en module ES ; aucune dépendance
 .github/workflows/   deploy.yml : export et déploiement automatiques
 ```
 

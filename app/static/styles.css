@@ -563,3 +563,6 @@ td { text-align: right; }
 
 .back { font-size: 15px; color: var(--ink-2); text-decoration: none; }
 .back:hover { color: var(--ink); }
+
+.colophon .logout { margin-left: 4px; color: var(--muted); }
+.colophon .logout:hover { color: var(--ink); }

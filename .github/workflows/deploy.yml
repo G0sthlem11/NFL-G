@@ -56,6 +56,15 @@ jobs:
       - name: Tests
         run: python -m pytest -q
 
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Middleware de protection (mot de passe, cookie signé) : aucun déploiement s'il échoue.
+      - name: Tests du middleware
+        run: node --test "tests/js/*.test.js"
+
       - name: Récupérer l'empreinte du dernier déploiement
         uses: actions/cache/restore@v4
         with:
@@ -82,12 +91,6 @@ jobs:
           else
             echo "deploy=true" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Installer Node.js
-        if: steps.decide.outputs.deploy == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
 
       - name: Installer la CLI Vercel
         if: steps.decide.outputs.deploy == 'true'

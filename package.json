@@ -1,0 +1,9 @@
+{
+  "name": "nfl-gameday-edge",
+  "private": true,
+  "description": "Middleware Vercel (protection par mot de passe). Aucune dépendance : rien à installer.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"tests/js/*.test.js\""
+  }
+}
