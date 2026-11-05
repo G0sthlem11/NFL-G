@@ -65,7 +65,12 @@ def player(player_id: str) -> PlayerSeason:
 
 @app.post("/api/refresh", response_model=Meta)
 def refresh() -> Meta:
-    repo.cache.refresh()
+    try:
+        repo.cache.refresh()
+    except Exception as exc:  # réseau coupé, GitHub indisponible… : l'ancien cache reste utilisable
+        logging.getLogger(__name__).exception("Échec de l'actualisation")
+        raise HTTPException(502, f"Téléchargement nflverse impossible ({type(exc).__name__}). "
+                                 "Les données précédentes restent affichées.") from exc
     return repo.meta()
 
 

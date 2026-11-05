@@ -4,11 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>NFL Gameday</title>
+  <meta name="description" content="Résultats, statistiques et joueurs clés des matchs NFL de la saison, d'après les données nflverse.">
   <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
-  <link rel="stylesheet" href="/static/styles.css?v=10">
+  <link rel="stylesheet" href="/static/styles.css?v=12">
 </head>
 <body>
   <header class="masthead">
@@ -22,17 +24,19 @@
     <div class="masthead-meta">
       <span id="season"></span>
       <span class="meta-sep" aria-hidden="true">·</span>
-      <span id="updated"></span>
-      <button type="button" id="refresh" class="link-button">Actualiser</button>
+      <span id="updated" aria-live="polite"></span>
+      <button type="button" id="refresh" class="link-button" title="Retélécharger les données nflverse">Actualiser</button>
     </div>
   </header>
 
-  <main id="view" tabindex="-1"></main>
+  <main id="view" tabindex="-1">
+    <noscript><p class="state-msg">Cette application a besoin de JavaScript pour afficher les matchs.</p></noscript>
+  </main>
 
   <footer class="colophon">
     <p>Données <a href="https://github.com/nflverse">nflverse</a>, publiées quelques heures après les matchs. Pas de suivi en direct. Heures de Paris.</p>
   </footer>
 
-  <script src="/static/app.js?v=10"></script>
+  <script src="/static/app.js?v=12"></script>
 </body>
 </html>

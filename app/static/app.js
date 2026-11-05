@@ -71,7 +71,7 @@ function renderMasthead() {
   const updated = document.getElementById("updated");
   if (m?.fetched_at) {
     const d = new Date(m.fetched_at);
-    updated.textContent = `Données mises à jour ${relativeTime(d)}`;
+    updated.textContent = `Mis à jour ${relativeTime(d)}`;
     updated.title = fmtUpdated.format(d);
   } else {
     updated.textContent = "";
@@ -94,8 +94,10 @@ document.getElementById("refresh").addEventListener("click", async (e) => {
     await loadMeta();
     await route();
     btn.textContent = "Actualiser";
+    btn.title = "Retélécharger les données nflverse";
   } catch (err) {
     btn.textContent = "Échec — réessayer";
+    btn.title = err.message;
     console.error(err);
   } finally {
     btn.disabled = false;
@@ -663,6 +665,19 @@ async function route() {
   if (page === "player" && arg) return renderPlayer(decodeURIComponent(arg));
   return renderWeek(state.meta.current_week ?? 1);
 }
+
+// Flèches gauche/droite : semaine précédente/suivante (page semaine uniquement).
+document.addEventListener("keydown", (e) => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  if (e.target.closest("input, textarea, select, [contenteditable]")) return;
+  const weeks = state.meta?.weeks.map((w) => w.week) || [];
+  const m = /^#\/week\/(\d+)$/.exec(location.hash) || (/^#?\/?$/.test(location.hash) ? [null, String(state.meta?.current_week)] : null);
+  if (!m) return;
+  const i = weeks.indexOf(Number(m[1]));
+  const j = e.key === "ArrowLeft" ? i - 1 : i + 1;
+  if (i >= 0 && j >= 0 && j < weeks.length) location.hash = `#/week/${weeks[j]}`;
+});
 
 window.addEventListener("hashchange", () => {
   route();
