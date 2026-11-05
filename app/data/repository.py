@@ -4,7 +4,8 @@ from __future__ import annotations
 import polars as pl
 
 from .cache import SeasonCache
-from .models import Game, GameDetail, Meta, Team, WeekInfo
+from .key_players import select_key_players
+from .models import Game, GameDetail, KeyPlayers, Meta, Team, WeekInfo
 from .normalize import as_str, to_game, to_team_stats, week_label
 
 
@@ -95,4 +96,17 @@ class NflRepository:
             game=game,
             away_stats=to_team_stats(game.away_team, ts_rows.get(game.away_team), fd_rows.get(game.away_team)),
             home_stats=to_team_stats(game.home_team, ts_rows.get(game.home_team), fd_rows.get(game.home_team)),
+            away_key=self._key_players(game, game.away_team),
+            home_key=self._key_players(game, game.home_team),
         )
+
+    def _key_players(self, game: Game, team: str) -> KeyPlayers:
+        ps = self.cache.get("player_stats")
+        dc = self.cache.get("depth_charts")
+        rw = self.cache.get("rosters")
+        stats = ps.filter((pl.col("game_id") == game.game_id) & (pl.col("team") == team)) \
+            if not ps.is_empty() else ps
+        depth = dc.filter(pl.col("team") == team) if not dc.is_empty() else dc
+        roster = rw.filter((pl.col("team") == team) & (pl.col("week") == game.week)) \
+            if not rw.is_empty() else rw
+        return select_key_players(team, game.gameday or "", game.kickoff_paris, stats, depth, roster)

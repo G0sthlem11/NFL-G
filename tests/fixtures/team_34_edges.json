@@ -1,0 +1,35 @@
+{
+  "_description": "Équipe BBB en 3-4 : les edges sont SLB/WLB (pas LDE/RDE, joueurs de ligne intérieure). Le TE1 était actif mais sans aucune stat : remplacé par le TE2.",
+  "team": "BBB",
+  "gameday": "2026-10-04",
+  "kickoff_utc": null,
+  "depth_charts": [
+    {"dt": "2026-10-01T07:00:00Z", "team": "BBB", "player_name": "Bravo QB", "gsis_id": "B_QB1", "pos_grp": "3WR 1TE", "pos_abb": "QB", "pos_slot": 9, "pos_rank": 1},
+    {"dt": "2026-10-01T07:00:00Z", "team": "BBB", "player_name": "Bravo RB", "gsis_id": "B_RB1", "pos_grp": "3WR 1TE", "pos_abb": "RB", "pos_slot": 11, "pos_rank": 1},
+    {"dt": "2026-10-01T07:00:00Z", "team": "BBB", "player_name": "Bravo WR1", "gsis_id": "B_WR1", "pos_grp": "3WR 1TE", "pos_abb": "WR", "pos_slot": 1, "pos_rank": 1},
+    {"dt": "2026-10-01T07:00:00Z", "team": "BBB", "player_name": "Bravo WR2", "gsis_id": "B_WR2", "pos_grp": "3WR 1TE", "pos_abb": "WR", "pos_slot": 2, "pos_rank": 2},
+    {"dt": "2026-10-01T07:00:00Z", "team": "BBB", "player_name": "Bravo TE1", "gsis_id": "B_TE1", "pos_grp": "3WR 1TE", "pos_abb": "TE", "pos_slot": 10, "pos_rank": 1},
+    {"dt": "2026-10-01T07:00:00Z", "team": "BBB", "player_name": "Bravo TE2", "gsis_id": "B_TE2", "pos_grp": "3WR 1TE", "pos_abb": "TE", "pos_slot": 10, "pos_rank": 2},
+    {"dt": "2026-10-01T07:00:00Z", "team": "BBB", "player_name": "Interior Left", "gsis_id": "B_DL1", "pos_grp": "Base 3-4 D", "pos_abb": "LDE", "pos_slot": 1, "pos_rank": 1},
+    {"dt": "2026-10-01T07:00:00Z", "team": "BBB", "player_name": "Nose", "gsis_id": "B_NT", "pos_grp": "Base 3-4 D", "pos_abb": "NT", "pos_slot": 2, "pos_rank": 1},
+    {"dt": "2026-10-01T07:00:00Z", "team": "BBB", "player_name": "Interior Right", "gsis_id": "B_DL2", "pos_grp": "Base 3-4 D", "pos_abb": "RDE", "pos_slot": 3, "pos_rank": 1},
+    {"dt": "2026-10-01T07:00:00Z", "team": "BBB", "player_name": "Strong Edge", "gsis_id": "B_OLB1", "pos_grp": "Base 3-4 D", "pos_abb": "SLB", "pos_slot": 7, "pos_rank": 1},
+    {"dt": "2026-10-01T07:00:00Z", "team": "BBB", "player_name": "Weak Edge", "gsis_id": "B_OLB2", "pos_grp": "Base 3-4 D", "pos_abb": "WLB", "pos_slot": 4, "pos_rank": 1},
+    {"dt": "2026-10-01T07:00:00Z", "team": "BBB", "player_name": "Inside Backer", "gsis_id": "B_ILB", "pos_grp": "Base 3-4 D", "pos_abb": "LILB", "pos_slot": 5, "pos_rank": 1}
+  ],
+  "player_stats": [
+    {"player_id": "B_QB1", "player_display_name": "Bravo QB", "position": "QB", "team": "BBB", "completions": 15, "attempts": 28, "passing_yards": 180},
+    {"player_id": "B_RB1", "player_display_name": "Bravo RB", "position": "RB", "team": "BBB", "carries": 20, "rushing_yards": 110},
+    {"player_id": "B_WR1", "player_display_name": "Bravo WR1", "position": "WR", "team": "BBB", "targets": 8, "receptions": 5, "receiving_yards": 70},
+    {"player_id": "B_WR2", "player_display_name": "Bravo WR2", "position": "WR", "team": "BBB", "targets": 4, "receptions": 2, "receiving_yards": 25},
+    {"player_id": "B_TE2", "player_display_name": "Bravo TE2", "position": "TE", "team": "BBB", "targets": 2, "receptions": 2, "receiving_yards": 18},
+    {"player_id": "B_DL1", "player_display_name": "Interior Left", "position": "DT", "team": "BBB", "def_tackles_solo": 3, "def_sacks": 1},
+    {"player_id": "B_DL2", "player_display_name": "Interior Right", "position": "DT", "team": "BBB", "def_tackles_solo": 2},
+    {"player_id": "B_OLB1", "player_display_name": "Strong Edge", "position": "LB", "team": "BBB", "def_tackles_solo": 4, "def_sacks": 2, "def_qb_hits": 3},
+    {"player_id": "B_OLB2", "player_display_name": "Weak Edge", "position": "OLB", "team": "BBB", "def_tackles_solo": 2, "def_fumbles_forced": 1},
+    {"player_id": "B_ILB", "player_display_name": "Inside Backer", "position": "LB", "team": "BBB", "def_tackles_solo": 6, "def_tackle_assists": 4}
+  ],
+  "rosters": [
+    {"week": 5, "team": "BBB", "gsis_id": "B_TE1", "full_name": "Bravo TE1", "position": "TE", "status": "ACT"}
+  ]
+}

@@ -285,6 +285,174 @@ main:focus { outline: none; }
 
 .byes { margin-top: 40px; font-size: 14px; color: var(--muted); }
 
+/* --- Page match : tableau de score ------------------------------------- */
+.game-head { margin-top: 24px; }
+
+.eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.scoreboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: clamp(10px, 3vw, 28px);
+  margin-top: 20px;
+  padding: 20px 0;
+  border-top: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule);
+}
+.scoreboard.is-scheduled { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+
+.sb-team { display: flex; flex-direction: column; min-width: 0; }
+.sb-team.right { text-align: right; }
+
+.sb-abbr {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(28px, 7vw, 44px);
+  line-height: 1.05;
+  font-variation-settings: "opsz" 144;
+}
+.sb-name { font-size: 14px; color: var(--muted); }
+
+.sb-score {
+  font-family: var(--font-display);
+  font-size: clamp(48px, 13vw, 88px);
+  font-weight: 300;
+  line-height: 1;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-variation-settings: "opsz" 144;
+  color: var(--ink-2);
+}
+.sb-score.is-winner { font-weight: 600; color: var(--ink); }
+.sb-team.is-loser .sb-abbr { color: var(--ink-2); font-weight: 400; }
+.sb-sep { font-family: var(--font-display); font-size: 28px; color: var(--muted); }
+
+.sb-status { margin: 12px 0 0; font-size: 14px; color: var(--muted); text-align: center; }
+
+.conditions { margin: 16px 0 0; font-size: 14px; color: var(--muted); text-align: center; }
+
+/* --- Tableaux --------------------------------------------------------- */
+table { border-collapse: collapse; }
+th, td { padding: 7px 0 7px 16px; font-weight: 400; }
+th:first-child, td:first-child { padding-left: 0; }
+td { text-align: right; }
+
+.quarters { margin: 24px auto 0; font-size: 15px; }
+.quarters thead th { font-size: 12px; color: var(--muted); text-align: right; padding-bottom: 4px; border-bottom: 1px solid var(--rule); }
+.quarters td, .quarters tbody th { padding-top: 5px; padding-bottom: 5px; min-width: 2.2em; }
+.quarters tbody th { text-align: left; font-family: var(--font-display); font-weight: 500; }
+.quarters .total { font-weight: 600; padding-left: 24px; }
+.quarters tbody tr + tr td, .quarters tbody tr + tr th { border-top: 1px solid var(--rule); }
+
+.block { margin-top: 56px; }
+
+.section-title {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 28px;
+  letter-spacing: -0.01em;
+}
+
+.team-stats { width: 100%; max-width: 560px; font-size: 16px; }
+.team-stats thead th {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 18px;
+  text-align: right;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.team-stats tbody th { text-align: left; color: var(--ink-2); }
+.team-stats tbody tr { border-bottom: 1px solid var(--rule); }
+.team-stats td { width: 6.5em; color: var(--ink-2); white-space: nowrap; }
+.team-stats td.is-better { color: var(--ink); font-weight: 600; }
+.team-stats .sub { font-size: 13px; color: var(--muted); font-weight: 400; }
+
+/* --- Joueurs clés ----------------------------------------------------- */
+.kp-grid { display: grid; grid-template-columns: 1fr; gap: 48px; margin-top: 8px; }
+@media (min-width: 800px) { .kp-grid { grid-template-columns: 1fr 1fr; } }
+
+.kp-team {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding-bottom: 8px;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 22px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.kp-sub {
+  margin: 28px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.scheme { margin-left: 6px; font-weight: 400; letter-spacing: 0.04em; }
+
+.card { padding: 14px 0; border-bottom: 1px solid var(--rule); }
+
+.card-role {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.card-pos { margin-left: 8px; font-weight: 400; color: var(--muted); }
+
+.card-head { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.card-name { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.25; }
+.card-name.is-empty { margin-top: 6px; font-weight: 400; color: var(--muted); }
+
+.headshot {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: top;
+  filter: grayscale(1) contrast(1.05);
+  background: var(--rule);
+}
+.headshot.is-empty { display: inline-block; }
+
+.card-note { margin: 8px 0 0; font-size: 13px; font-style: italic; color: var(--muted); }
+
+.stat-cells {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+  gap: 4px 8px;
+  margin: 10px 0 0;
+}
+.stat-cells div { min-width: 0; }
+.stat-cells dt { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.stat-cells dd { margin: 0; font-size: 17px; font-variant-numeric: tabular-nums lining-nums; }
+
+.big-plays { list-style: none; margin: 6px 0 0; padding: 0; }
+.big-plays li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 15px;
+}
+.bp-pos { font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: 0.04em; }
+.bp-what { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
 /* --- États ------------------------------------------------------------ */
 .state-msg { color: var(--muted); font-style: italic; }
 .state-msg.is-error { color: var(--accent); font-style: normal; }

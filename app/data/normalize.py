@@ -74,6 +74,7 @@ def to_game(row: dict, quarters: list[dict] | None = None) -> Game:
         week_label=week_label(row["game_type"], as_int(row["week"])),
         game_type=row["game_type"],
         status="final" if final else "scheduled",
+        gameday=as_str(row.get("gameday")),
         kickoff_paris=kickoff_paris(row.get("gameday"), row.get("gametime")),
         away_team=row["away_team"],
         home_team=row["home_team"],

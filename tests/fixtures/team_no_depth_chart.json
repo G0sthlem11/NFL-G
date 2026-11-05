@@ -1,0 +1,23 @@
+{
+  "_description": "Équipe CCC sans aucun depth chart : repli sur la production du match (WR1/WR2 = plus de yards en réception, RB1 = plus de yards à la course + réception, edges = meilleur score de pass rush parmi DE/OLB).",
+  "team": "CCC",
+  "gameday": "2026-10-04",
+  "kickoff_utc": null,
+  "depth_charts": [],
+  "player_stats": [
+    {"player_id": "C_QB", "player_display_name": "Charlie QB", "position": "QB", "team": "CCC", "completions": 22, "attempts": 35, "passing_yards": 240},
+    {"player_id": "C_QB2", "player_display_name": "Kneel QB", "position": "QB", "team": "CCC", "carries": 2, "rushing_yards": -2},
+    {"player_id": "C_RB1", "player_display_name": "Charlie RB1", "position": "RB", "team": "CCC", "carries": 12, "rushing_yards": 50},
+    {"player_id": "C_RB2", "player_display_name": "Charlie RB2", "position": "RB", "team": "CCC", "carries": 14, "rushing_yards": 80, "receptions": 1, "receiving_yards": 10},
+    {"player_id": "C_WR1", "player_display_name": "Charlie WR1", "position": "WR", "team": "CCC", "targets": 5, "receptions": 3, "receiving_yards": 30},
+    {"player_id": "C_WR2", "player_display_name": "Charlie WR2", "position": "WR", "team": "CCC", "targets": 9, "receptions": 6, "receiving_yards": 90},
+    {"player_id": "C_WR3", "player_display_name": "Charlie WR3", "position": "WR", "team": "CCC", "targets": 7, "receptions": 5, "receiving_yards": 60},
+    {"player_id": "C_TE", "player_display_name": "Charlie TE", "position": "TE", "team": "CCC", "targets": 2, "receptions": 1, "receiving_yards": 10},
+    {"player_id": "C_DE1", "player_display_name": "Charlie DE1", "position": "DE", "team": "CCC", "def_tackles_solo": 2, "def_sacks": 1},
+    {"player_id": "C_DE2", "player_display_name": "Charlie DE2", "position": "DE", "team": "CCC", "def_tackles_solo": 1},
+    {"player_id": "C_OLB", "player_display_name": "Charlie OLB", "position": "OLB", "team": "CCC", "def_tackles_solo": 3, "def_sacks": 2},
+    {"player_id": "C_LB", "player_display_name": "Charlie LB", "position": "LB", "team": "CCC", "def_tackles_solo": 5, "def_tackle_assists": 3},
+    {"player_id": null, "player_display_name": null, "position": null, "team": "CCC", "def_tackles_solo": 9, "def_fumbles_forced": 1}
+  ],
+  "rosters": []
+}

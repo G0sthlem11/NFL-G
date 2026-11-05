@@ -31,10 +31,13 @@ RETRY_AFTER_FAILURE = timedelta(minutes=10)
 
 
 DATASETS = ("schedules", "teams", "player_stats", "team_stats", "depth_charts",
-            "quarter_scores", "first_downs")
+            "rosters", "quarter_scores", "first_downs")
 
 TEAM_COLUMNS = ["team_abbr", "team_name", "team_nick", "team_conf", "team_division",
                 "team_color", "team_color2"]
+# Rosters hebdo : sert à savoir si un titulaire était actif (ACT), inactif (INA),
+# en réserve/blessé (RES)… le jour du match.
+ROSTER_COLUMNS = ["season", "week", "game_type", "team", "gsis_id", "full_name", "position", "status"]
 
 
 def _download(season: int) -> dict[str, pl.DataFrame]:
@@ -51,6 +54,7 @@ def _download(season: int) -> dict[str, pl.DataFrame]:
         "player_stats": nfl.load_player_stats([season]),
         "team_stats": nfl.load_team_stats([season]),
         "depth_charts": nfl.load_depth_charts([season]),
+        "rosters": nfl.load_rosters_weekly([season]).select(ROSTER_COLUMNS),
         "quarter_scores": derive.quarter_scores(pbp),
         "first_downs": derive.first_downs(pbp),
     }

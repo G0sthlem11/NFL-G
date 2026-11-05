@@ -24,6 +24,7 @@ class Game(BaseModel):
     week_label: str
     game_type: str  # REG, WC, DIV, CON, SB
     status: Literal["final", "scheduled"]
+    gameday: str | None = None  # date du match, heure de l'Est (YYYY-MM-DD)
     kickoff_paris: datetime | None = None
     away_team: str
     home_team: str
@@ -106,11 +107,17 @@ class PlayerLine(BaseModel):
 
 
 class KeyPlayer(BaseModel):
-    role: str  # QB, RB1, WR1, WR2, TE1, EDGE_L, EDGE_R
+    role: str  # QB, RB1, WR1, WR2, TE1, EDGE1, EDGE2
+    label: str  # libellé affiché : QB, RB1, WR1, WR2, TE1, DE, OLB
+    depth_pos: str | None = None  # poste du depth chart (LDE, WLB…)
     player: PlayerLine | None = None
-    source: Literal["depth_chart", "fallback", "none"] = "none"
-    # Titulaire prévu par le depth chart quand il n'a pas joué (remplacé)
+    # depth_chart : le titulaire du depth chart a joué
+    # replacement : il n'a pas joué, remplacé par le plus productif du poste
+    # fallback    : pas de depth chart, choix sur la production du match
+    # none        : personne à afficher
+    source: Literal["depth_chart", "replacement", "fallback", "none"] = "none"
     replaced_starter: str | None = None
+    replaced_reason: str | None = None  # « inactif », « en réserve »…
 
 
 class KeyPlayers(BaseModel):
@@ -127,6 +134,8 @@ class GameDetail(BaseModel):
     game: Game
     away_stats: TeamStats | None = None
     home_stats: TeamStats | None = None
+    away_key: KeyPlayers | None = None
+    home_key: KeyPlayers | None = None
 
 
 class Team(BaseModel):

@@ -256,21 +256,219 @@ function scrollStripToCurrent() {
   if (strip && cur) strip.scrollLeft = cur.offsetLeft - strip.clientWidth / 2 + cur.clientWidth / 2;
 }
 
-// --- Page match (provisoire, complétée au jalon 4) -----------------------
+// --- Page match ---------------------------------------------------------
+const nf1 = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 });
+const num = (v) => (v === null || v === undefined ? "—" : nf1.format(v));
+const ROOF = { outdoors: "En extérieur", dome: "Sous dôme", closed: "Toit fermé", open: "Toit ouvert" };
+
+function teamName(abbr) {
+  return state.teams.get(abbr)?.name || abbr;
+}
+
+function conditions(g) {
+  const parts = [];
+  if (g.stadium) parts.push(esc(g.stadium));
+  if (g.roof) parts.push(esc(ROOF[g.roof] || g.roof));
+  if (g.temp_f !== null && g.temp_f !== undefined) parts.push(`${Math.round((g.temp_f - 32) * 5 / 9)} °C`);
+  if (g.wind_mph !== null && g.wind_mph !== undefined) parts.push(`vent ${Math.round(g.wind_mph * 1.609)} km/h`);
+  return parts.join(" · ");
+}
+
+function quarterTable(g) {
+  if (!g.quarters.length) return "";
+  const head = g.quarters.map((q) => `<th scope="col">${esc(q.period)}</th>`).join("");
+  const row = (abbr, side, total) => `
+    <tr><th scope="row">${esc(abbr)}</th>${g.quarters.map((q) => `<td>${dash(q[side])}</td>`).join("")}<td class="total">${dash(total)}</td></tr>`;
+  return `
+    <table class="quarters" aria-label="Score par quart-temps">
+      <thead><tr><th></th>${head}<th scope="col">T</th></tr></thead>
+      <tbody>${row(g.away_team, "away", g.away_score)}${row(g.home_team, "home", g.home_score)}</tbody>
+    </table>`;
+}
+
+// better : "high" (plus grand = mieux), "low", ou null (pas de comparaison)
+const TEAM_ROWS = [
+  { label: "Yards totaux", get: (s) => s.total_yards, better: "high" },
+  { label: "Yards à la passe (nets)", get: (s) => s.net_passing_yards, better: "high" },
+  { label: "Yards à la course", get: (s) => s.rushing_yards, better: "high" },
+  { label: "Passes complétées", get: (s) => s.completions, fmt: (s) => s.completions == null ? "—" : `${s.completions}/${dash(s.attempts)}`, better: null },
+  { label: "Courses", get: (s) => s.carries, better: null },
+  { label: "1ers downs", get: (s) => s.first_downs, better: "high" },
+  { label: "Turnovers", get: (s) => s.turnovers, better: "low" },
+  { label: "Sacks subis", get: (s) => s.sacks_suffered, fmt: (s) => s.sacks_suffered == null ? "—" : `${s.sacks_suffered}${s.sack_yards_lost ? ` <span class="sub">−${s.sack_yards_lost}</span>` : ""}`, better: "low" },
+  { label: "Pénalités", get: (s) => s.penalties, fmt: (s) => s.penalties == null ? "—" : `${s.penalties} <span class="sub">${dash(s.penalty_yards)} yds</span>`, better: "low" },
+];
+
+function teamStatsTable(g, a, h) {
+  if (!a || !h) return "";
+  const rows = TEAM_ROWS.map((r) => {
+    const va = r.get(a), vh = r.get(h);
+    let ca = "", ch = "";
+    if (r.better && va != null && vh != null && va !== vh) {
+      const aBetter = r.better === "high" ? va > vh : va < vh;
+      ca = aBetter ? "is-better" : ""; ch = aBetter ? "" : "is-better";
+    }
+    const f = r.fmt || ((s) => dash(r.get(s)));
+    return `<tr><th scope="row">${r.label}</th><td class="${ca}">${f(a)}</td><td class="${ch}">${f(h)}</td></tr>`;
+  }).join("");
+  return `
+    <section class="block">
+      <h2 class="section-title">Statistiques d'équipe</h2>
+      <table class="team-stats">
+        <thead><tr><th></th><th scope="col">${esc(g.away_team)}</th><th scope="col">${esc(g.home_team)}</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </section>`;
+}
+
+function statCells(cells) {
+  return `<dl class="stat-cells">${cells.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`;
+}
+
+function roleStats(role, p) {
+  if (role === "QB") {
+    return statCells([
+      ["C/A", p.completions == null ? "—" : `${p.completions}/${dash(p.attempts)}`],
+      ["Yds", num(p.passing_yards)], ["TD", num(p.passing_tds)], ["INT", num(p.interceptions)],
+      ["Sacks", num(p.sacks_suffered)], ["Course", p.carries ? `${p.carries}–${num(p.rushing_yards)}` : "—"],
+    ]);
+  }
+  if (role === "RB1") {
+    const avg = p.carries ? (p.rushing_yards ?? 0) / p.carries : null;
+    return statCells([
+      ["Courses", num(p.carries)], ["Yds", num(p.rushing_yards)], ["Moy.", num(avg)],
+      ["TD", num(p.rushing_tds)], ["Réc.", num(p.receptions)],
+    ]);
+  }
+  if (role.startsWith("EDGE")) {
+    return statCells([
+      ["Plaq.", num(p.tackles)], ["Sacks", num(p.sacks)], ["QB hits", num(p.qb_hits)], ["TFL", num(p.tackles_for_loss)],
+    ]);
+  }
+  return statCells([
+    ["Cibles", num(p.targets)], ["Réc.", num(p.receptions)], ["Yds", num(p.receiving_yards)], ["TD", num(p.receiving_tds)],
+  ]);
+}
+
+function headshot(p) {
+  if (!p.headshot_url) return `<span class="headshot is-empty" aria-hidden="true"></span>`;
+  return `<img class="headshot" src="${esc(p.headshot_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'headshot is-empty'}))">`;
+}
+
+function playerCard(k) {
+  const pos = k.depth_pos && k.depth_pos !== k.label ? `<span class="card-pos">${esc(k.depth_pos)}</span>` : "";
+  const note = k.replaced_starter
+    ? `<p class="card-note">Remplace ${esc(k.replaced_starter)} (${esc(k.replaced_reason || "absent")})</p>`
+    : k.source === "fallback" ? `<p class="card-note">Choisi d'après la production du match</p>` : "";
+  if (!k.player) {
+    return `
+      <article class="card">
+        <h4 class="card-role">${esc(k.label)}${pos}</h4>
+        <p class="card-name is-empty">—</p>${note}
+      </article>`;
+  }
+  const p = k.player;
+  return `
+    <article class="card">
+      <h4 class="card-role">${esc(k.label)}${pos}</h4>
+      <div class="card-head">${headshot(p)}<p class="card-name">${esc(p.name)}</p></div>
+      ${roleStats(k.role, p)}
+      ${note}
+    </article>`;
+}
+
+function bigPlays(list) {
+  if (!list.length) return `<p class="state-msg">Aucun sack, interception ni fumble forcé.</p>`;
+  const what = (p) => [
+    p.def_interceptions ? `${num(p.def_interceptions)} INT` : "",
+    p.fumbles_forced ? `${num(p.fumbles_forced)} FF` : "",
+    p.sacks ? `${num(p.sacks)} sack${p.sacks > 1 ? "s" : ""}` : "",
+  ].filter(Boolean).join(" · ");
+  return `<ul class="big-plays">${list.map((p) => `
+    <li><span class="bp-name">${esc(p.name)} <span class="bp-pos">${esc(p.position || "")}</span></span><span class="bp-what">${what(p)}</span></li>`).join("")}</ul>`;
+}
+
+function keyPlayersColumn(abbr, kp) {
+  if (!kp) return "";
+  const t = state.teams.get(abbr);
+  const tl = kp.tackle_leader;
+  const scheme = kp.scheme ? `<span class="scheme">· ${esc(kp.scheme)}</span>` : "";
+  return `
+    <div class="kp-col">
+      <h3 class="kp-team"><span class="pill"${teamColorStyle(t)} aria-hidden="true"></span>${esc(teamName(abbr))}</h3>
+      <h4 class="kp-sub">Attaque</h4>
+      <div class="cards">${kp.offense.map(playerCard).join("")}</div>
+      <h4 class="kp-sub">Défense ${scheme}</h4>
+      <div class="cards">
+        ${kp.edges.map(playerCard).join("")}
+        <article class="card">
+          <h4 class="card-role">Meilleur plaqueur</h4>
+          ${tl ? `<div class="card-head">${headshot(tl)}<p class="card-name">${esc(tl.name)} <span class="bp-pos">${esc(tl.position || "")}</span></p></div>
+            ${statCells([["Plaq.", num(tl.tackles)], ["Solo", num(tl.tackles_solo)], ["Ast.", num(tl.tackle_assists)], ["TFL", num(tl.tackles_for_loss)]])}`
+            : `<p class="card-name is-empty">—</p>`}
+        </article>
+      </div>
+      <h4 class="kp-sub">Sacks, interceptions, fumbles forcés</h4>
+      ${bigPlays(kp.playmakers)}
+    </div>`;
+}
+
+function scoreboard(g) {
+  const final = g.status === "final";
+  const kickoff = g.kickoff_paris ? new Date(g.kickoff_paris) : null;
+  const when = kickoff ? `${capitalize(fmtDay.format(kickoff))} · ${fmtTime.format(kickoff)}` : "Date à confirmer";
+  let aw = "", hw = "";
+  if (final && g.away_score !== g.home_score) {
+    aw = g.away_score > g.home_score ? "is-winner" : "is-loser";
+    hw = g.away_score > g.home_score ? "is-loser" : "is-winner";
+  }
+  const side = (abbr, score, cls, align) => `
+    <div class="sb-team ${cls} ${align}">
+      <span class="sb-abbr">${esc(abbr)}</span>
+      <span class="sb-name">${esc(teamName(abbr))}</span>
+    </div>
+    ${final ? `<span class="sb-score ${cls}">${dash(score)}</span>` : ""}`;
+  return `
+    <p class="eyebrow">${esc(g.week_label)} · ${esc(when)}</p>
+    <div class="scoreboard ${final ? "" : "is-scheduled"}">
+      ${side(g.away_team, g.away_score, aw, "left")}
+      <span class="sb-sep">${final ? "–" : "@"}</span>
+      ${final ? `<span class="sb-score ${hw}">${dash(g.home_score)}</span>` : ""}
+      <div class="sb-team ${hw} right">
+        <span class="sb-abbr">${esc(g.home_team)}</span>
+        <span class="sb-name">${esc(teamName(g.home_team))}</span>
+      </div>
+    </div>
+    <p class="sb-status">${final ? (g.overtime ? "Final après prolongation" : "Final") : "Match à venir, heure de Paris"}</p>
+    ${quarterTable(g)}
+    ${conditions(g) ? `<p class="conditions">${conditions(g)}</p>` : ""}`;
+}
+
 async function renderGame(gameId) {
   setNav("week");
   setMessage("Chargement…");
+  const seq = state.routeSeq;
+  let d;
   try {
-    const d = await api(`/api/games/${encodeURIComponent(gameId)}`);
-    const g = d.game;
-    document.title = `${g.away_team} – ${g.home_team} — NFL Gameday`;
-    view.innerHTML = `
-      <a class="back" href="#/week/${g.week}">← ${esc(g.week_label)}</a>
-      <h1 class="page-title" style="margin-top:16px">${esc(g.away_team)} ${dash(g.away_score)} – ${dash(g.home_score)} ${esc(g.home_team)}</h1>
-      <p class="page-sub">La fiche complète du match arrive au prochain jalon.</p>`;
+    d = await api(`/api/games/${encodeURIComponent(gameId)}`);
   } catch (err) {
-    setMessage(err.status === 404 ? "Match introuvable." : `Erreur : ${err.message}`, true);
+    if (seq === state.routeSeq) setMessage(err.status === 404 ? "Match introuvable." : `Erreur : ${err.message}`, true);
+    return;
   }
+  if (seq !== state.routeSeq) return;
+  const g = d.game;
+  document.title = `${g.away_team} – ${g.home_team}, ${g.week_label} — NFL Gameday`;
+  const body = g.status === "final"
+    ? `${teamStatsTable(g, d.away_stats, d.home_stats)}
+       <section class="block">
+         <h2 class="section-title">Joueurs clés</h2>
+         <div class="kp-grid">${keyPlayersColumn(g.away_team, d.away_key)}${keyPlayersColumn(g.home_team, d.home_key)}</div>
+       </section>`
+    : "";
+  view.innerHTML = `
+    <a class="back" href="#/week/${g.week}">← ${esc(g.week_label)}</a>
+    <header class="game-head">${scoreboard(g)}</header>
+    ${body}`;
 }
 
 // --- Routage ----------------------------------------------------------
