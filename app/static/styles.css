@@ -1,0 +1,293 @@
+/* NFL Gameday — encre sur papier crème, inversé en mode sombre. */
+
+:root {
+  --paper: #f7f3ea;
+  --ink: #1d1b17;
+  --ink-2: #4a463f;
+  --muted: #776f62;
+  --rule: #ddd5c6;
+  --rule-strong: #1d1b17;
+  --accent: #9c3d22;
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-text: "Source Serif 4", Georgia, serif;
+
+  --gutter: 16px;
+  --max: 960px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #15140f;
+    --ink: #ece6d9;
+    --ink-2: #bdb6a7;
+    --muted: #8f887a;
+    --rule: #34302a;
+    --rule-strong: #ece6d9;
+    --accent: #e08a64;
+  }
+}
+
+@media (min-width: 640px) {
+  :root { --gutter: 32px; }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-text);
+  font-size: 17px;
+  line-height: 1.5;
+  font-optical-sizing: auto;
+}
+
+a { color: inherit; }
+
+table, .num, .score { font-variant-numeric: tabular-nums lining-nums; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* --- En-tête -------------------------------------------------------- */
+.masthead,
+main,
+.colophon {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding-left: var(--gutter);
+  padding-right: var(--gutter);
+}
+
+.masthead { padding-top: 28px; }
+
+.masthead-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  font-variation-settings: "opsz" 72;
+}
+
+.nav { display: flex; gap: 20px; font-size: 15px; }
+.nav a { text-decoration: none; color: var(--ink-2); padding: 4px 0; }
+.nav a:hover { color: var(--ink); }
+.nav a[aria-current="page"] { color: var(--ink); border-bottom: 1px solid var(--accent); }
+
+.masthead-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.link-button {
+  margin-left: auto;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--rule);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.link-button:hover { color: var(--ink); text-decoration-color: currentColor; }
+.link-button:disabled { cursor: progress; text-decoration: none; }
+
+main { padding-top: 40px; padding-bottom: 64px; min-height: 60vh; }
+main:focus { outline: none; }
+
+.colophon {
+  padding-bottom: 40px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.colophon p { margin: 0; padding-top: 20px; border-top: 1px solid var(--rule); }
+
+/* --- Titres de page --------------------------------------------------- */
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 24px;
+}
+
+.page-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(40px, 9vw, 64px);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variation-settings: "opsz" 144;
+}
+
+.page-sub { margin: 10px 0 0; color: var(--muted); font-size: 15px; }
+
+.pager { display: flex; gap: 20px; font-size: 15px; }
+.pager a { text-decoration: none; color: var(--ink-2); }
+.pager a:hover { color: var(--ink); }
+.pager .is-disabled { color: var(--rule); }
+
+/* --- Sélecteur de semaine --------------------------------------------- */
+.week-strip {
+  display: flex;
+  gap: 2px;
+  margin: 28px 0 8px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  border-bottom: 1px solid var(--rule);
+}
+
+.week-strip a,
+.week-strip span {
+  flex: 0 0 auto;
+  min-width: 34px;
+  padding: 6px 6px 8px;
+  text-align: center;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  color: var(--ink-2);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -5px;
+}
+
+.week-strip a:hover { color: var(--ink); }
+.week-strip .is-future { color: var(--muted); }
+.week-strip .is-empty { color: var(--rule); }
+.week-strip [aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); }
+.week-strip .strip-sep { min-width: 16px; color: var(--rule); padding-left: 0; padding-right: 0; }
+
+/* --- Liste des matchs ------------------------------------------------- */
+.day { margin-top: 40px; }
+
+.day-label {
+  margin: 0 0 4px;
+  font-family: var(--font-text);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.games {
+  display: grid;
+  grid-template-columns: 1fr;
+  column-gap: 48px;
+}
+
+@media (min-width: 800px) {
+  .games { grid-template-columns: 1fr 1fr; }
+}
+
+.game {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--rule);
+  text-decoration: none;
+}
+
+.game:hover .abbr { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+
+.game-status {
+  display: flex;
+  flex-direction: column;
+  padding-top: 3px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.game-status .time { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
+.team-line {
+  display: grid;
+  grid-template-columns: 10px 3.2em minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 10px;
+  color: var(--ink-2);
+}
+
+.team-line + .team-line { margin-top: 2px; }
+
+.pill {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--team, var(--rule));
+  box-shadow: 0 0 0 1px var(--rule);
+  align-self: center;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pill { background: var(--team-dark, var(--team, var(--rule))); }
+}
+
+.abbr {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 20px;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+
+.team-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 15px;
+}
+.team-name .nick { display: none; }
+
+.score {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 400;
+  text-align: right;
+  min-width: 2ch;
+  color: var(--ink-2);
+}
+
+.is-winner .score { font-weight: 600; color: var(--ink); }
+.is-loser .abbr { color: var(--ink-2); font-weight: 400; }
+
+.is-scheduled .team-line { color: var(--ink-2); }
+
+@media (max-width: 420px) {
+  .game { grid-template-columns: 52px 1fr; gap: 8px; }
+  .team-name .full { display: none; }
+  .team-name .nick { display: inline; }
+}
+
+.byes { margin-top: 40px; font-size: 14px; color: var(--muted); }
+
+/* --- États ------------------------------------------------------------ */
+.state-msg { color: var(--muted); font-style: italic; }
+.state-msg.is-error { color: var(--accent); font-style: normal; }
+
+.back { font-size: 15px; color: var(--ink-2); text-decoration: none; }
+.back:hover { color: var(--ink); }
