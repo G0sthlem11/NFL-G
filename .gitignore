@@ -1,0 +1,14 @@
+# Environnement Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Cache local des données nflverse
+data/
+
+# Éditeurs / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
