@@ -1,9 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <style>
-    rect { fill: #1d1b17; }
-    text { fill: #f7f3ea; }
-    @media (prefers-color-scheme: dark) { rect { fill: #ece6d9; } text { fill: #15140f; } }
-  </style>
-  <rect width="32" height="32" rx="6"/>
-  <text x="16" y="23" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="21" font-weight="700">G</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <style>.ink{fill:#1C1B19}@media (prefers-color-scheme:dark){.ink{fill:#F5F1E8}}</style>
+  <g class="ink">
+    <rect x="16" y="8" width="10" height="50"/>
+    <rect x="74" y="8" width="10" height="50"/>
+    <rect x="16" y="50" width="68" height="10"/>
+    <rect x="45" y="60" width="10" height="34"/>
+  </g>
+  <circle cx="50" cy="28" r="10" fill="#B4532A"/>
 </svg>
