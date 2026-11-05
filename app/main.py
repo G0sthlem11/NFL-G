@@ -9,7 +9,6 @@ from pathlib import Path
 
 import nflreadpy as nfl
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .data.cache import SeasonCache
@@ -75,9 +74,8 @@ def refresh() -> Meta:
 
 
 # --- Front -------------------------------------------------------------
-app.mount("/static", StaticFiles(directory=STATIC), name="static")
-
-
-@app.get("/", include_in_schema=False)
-def index() -> FileResponse:
-    return FileResponse(STATIC / "index.html")
+# Le front est servi à la racine, exactement comme dans l'export statique
+# (dist/), où app/static/ est copié tel quel : index.html référence ses
+# fichiers par chemins relatifs (app.js, styles.css…). Monté en dernier pour
+# que les routes /api/... restent prioritaires.
+app.mount("/", StaticFiles(directory=STATIC, html=True), name="front")

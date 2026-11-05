@@ -78,4 +78,6 @@ def test_standings_and_player(client):
 def test_front_is_served(client):
     r = client.get("/")
     assert r.status_code == 200 and "NFL Gameday" in r.text
-    assert client.get("/static/favicon.svg").status_code == 200
+    assert client.get("/favicon.svg").status_code == 200
+    assert 'mode: "api"' in client.get("/config.js").text
+    assert client.get("/api/inconnu").status_code == 404

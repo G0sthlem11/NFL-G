@@ -1,0 +1,79 @@
+"""L'export statique doit produire exactement les réponses de l'API."""
+import json
+
+import pytest
+from fastapi.testclient import TestClient
+
+import app.main as main
+from app.data.cache import SeasonCache
+from app.data.repository import NflRepository
+from app.export import content_hash, export
+from tests.test_api import fake_season
+
+DATASETS = ("schedules", "teams", "player_stats")
+
+
+@pytest.fixture()
+def exported(tmp_path, monkeypatch):
+    repo = NflRepository(SeasonCache(2026, data_dir=tmp_path / "cache", downloader=fake_season,
+                                     datasets=DATASETS))
+    monkeypatch.setattr(main, "repo", repo)
+    res = export(repo, tmp_path / "dist")
+    return res, TestClient(main.app)
+
+
+def endpoint_for(rel: str) -> str:
+    """data/weeks/1.json -> /api/weeks/1"""
+    return "/api/" + rel.removeprefix("data/").removesuffix(".json")
+
+
+def test_every_file_matches_its_endpoint(exported):
+    res, client = exported
+    data_files = sorted(p.relative_to(res.out).as_posix() for p in (res.out / "data").rglob("*.json"))
+    assert data_files == [
+        "data/games/2026_01_AAA_BBB.json", "data/games/2026_02_BBB_AAA.json",
+        "data/meta.json", "data/players/P1.json", "data/standings.json", "data/teams.json",
+        "data/weeks/1.json", "data/weeks/2.json",
+    ]
+    for rel in data_files:
+        body = (res.out / rel).read_bytes()
+        api = client.get(endpoint_for(rel))
+        assert api.status_code == 200, rel
+        if rel == "data/meta.json":
+            meta = json.loads(body)
+            assert meta.pop("generated_at")  # seul ajout par rapport à l'endpoint
+            assert meta == api.json()
+        else:
+            assert body == api.content, rel  # identique octet pour octet
+
+
+def test_front_copied_in_static_mode(exported):
+    res, _ = exported
+    assert (res.out / "index.html").exists() and (res.out / "app.js").exists()
+    assert 'mode: "static"' in (res.out / "config.js").read_text(encoding="utf-8")
+    html = (res.out / "index.html").read_text(encoding="utf-8")
+    assert "?v=12" not in html and 'src="app.js?v=' in html  # versions = empreinte du contenu
+
+
+def test_content_hash_ignores_generation_time(exported, tmp_path):
+    res, _ = exported
+    meta_path = res.out / "data" / "meta.json"
+    h1 = content_hash(res.out / "data")
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["generated_at"] = "2030-01-01T00:00:00+00:00"
+    meta["fetched_at"] = "2030-01-01T00:00:00Z"
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+    assert content_hash(res.out / "data") == h1
+    (res.out / "data" / "teams.json").write_text("[]", encoding="utf-8")
+    assert content_hash(res.out / "data") != h1
+
+
+def test_refuses_to_wipe_unrelated_folder(tmp_path):
+    other = tmp_path / "mes-documents"
+    other.mkdir()
+    (other / "important.txt").write_text("ne pas effacer")
+    repo = NflRepository(SeasonCache(2026, data_dir=tmp_path / "cache", downloader=fake_season,
+                                     datasets=DATASETS))
+    with pytest.raises(SystemExit):
+        export(repo, other)
+    assert (other / "important.txt").exists()

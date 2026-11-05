@@ -7,6 +7,10 @@ __pycache__/
 # Cache local des données nflverse
 /data/
 
+# Export statique (généré par py -m app.export, déployé par la GitHub Action)
+/dist/
+/.vercel/
+
 # Éditeurs / OS
 .vscode/
 .idea/
