@@ -1,7 +1,7 @@
 """Tests de bout en bout de l'API sur une mini-saison fictive (aucun accès réseau).
 
 Les données sont volontairement incomplètes (pas de stats d'équipe, pas de
-depth chart, pas de play-by-play) : l'API doit répondre avec des valeurs
+stats PFR, pas de play-by-play) : l'API doit répondre avec des valeurs
 nulles, jamais une erreur.
 """
 import polars as pl
@@ -59,10 +59,13 @@ def test_meta_and_week(client):
 def test_game_with_missing_data_does_not_fail(client):
     d = client.get("/api/games/2026_01_AAA_BBB").json()
     assert d["away_stats"]["total_yards"] is None
-    qb = d["away_key"]["offense"][0]
-    assert qb["source"] == "fallback" and qb["player"]["name"] == "Alpha Passeur"
-    assert qb["player"]["passing_tds"] is None
-    assert d["home_key"]["tackle_leader"] is None
+    k = d["key_players"]
+    assert (k["away"]["team"], k["home"]["team"]) == ("AAA", "BBB")
+    assert [q["name"] for q in k["away"]["quarterbacks"]] == ["Alpha Passeur"]
+    assert k["away"]["quarterbacks"][0]["passing_tds"] is None
+    assert k["home"] == {"team": "BBB", "quarterbacks": [], "offense": [], "defense": [], "kickers": []}
+    # Pas de pfr_def dans cette mini-saison : score défensif sans pressions.
+    assert k["pressures_available"] is False and k["weights"]["defense"]["top"] == 3
     assert client.get("/api/games/inconnu").status_code == 404
 
 
@@ -87,3 +90,21 @@ def test_manifest_served_with_manifest_content_type(client):
     r = client.get("/manifest.webmanifest")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("application/manifest+json")
+
+
+def test_mvp_reference_adds_previous_season_early(tmp_path):
+    """Peu de matchs joués : la saison précédente complète les distributions du MVP."""
+    def with_prev(season):
+        frames = fake_season(season)
+        frames["prev_player_stats"] = pl.DataFrame({
+            "player_id": ["OLD"], "player_display_name": ["Ancien"], "position": ["WR"], "team": ["AAA"],
+            "game_id": ["2025_10_AAA_BBB"], "receptions": [6], "receiving_yards": [140],
+        })
+        return frames
+
+    cache = SeasonCache(2026, data_dir=tmp_path, downloader=with_prev,
+                        datasets=("schedules", "teams", "player_stats", "prev_player_stats"))
+    scale = NflRepository(cache).mvp_scale()
+    assert scale.seasons == (2025, 2026)
+    # Ligne 2025 (WR, 140 yds) + QB 2026 de la mini-saison (250 yds -> 0,4 × 250 = 100).
+    assert scale.sorted["offense"] == [140.0] and scale.sorted["qb"] == [100.0]

@@ -4,11 +4,13 @@ from __future__ import annotations
 import polars as pl
 
 from .cache import SeasonCache
-from .key_players import select_key_players
-from .models import (DivisionStandings, Game, GameDetail, KeyPlayers, Meta, PlayerGame,
-                     PlayerSeason, Team, WeekInfo)
+from .key_players import MvpScale, load_config, select_match_key_players
+from .models import (DivisionStandings, Game, GameDetail, MatchKeyPlayers, Meta, PlayerGame,
+                     PlayerSeason, Rankings, Team, WeekInfo)
 from .normalize import as_int, as_str, to_game, to_player_line, to_team_stats, week_label
+from .rankings import compute_rankings
 from .standings import compute_standings
+from .team_assets import PAPER_DARK, PAPER_LIGHT, dot_color, logo_path
 
 # Colonnes player_stats additionnées pour les totaux de saison.
 SEASON_SUM_COLUMNS = [
@@ -49,12 +51,17 @@ class NflRepository:
         df = self.cache.get("teams")
         if df.is_empty():
             return []
-        return [
-            Team(abbr=r["team_abbr"], name=r["team_name"], nick=as_str(r.get("team_nick")),
-                 conference=as_str(r.get("team_conf")), division=as_str(r.get("team_division")),
-                 color=as_str(r.get("team_color")), color2=as_str(r.get("team_color2")))
-            for r in df.sort("team_abbr").to_dicts()
-        ]
+        teams = []
+        for r in df.sort("team_abbr").to_dicts():
+            c1, c2 = as_str(r.get("team_color")), as_str(r.get("team_color2"))
+            teams.append(Team(
+                abbr=r["team_abbr"], name=r["team_name"], nick=as_str(r.get("team_nick")),
+                conference=as_str(r.get("team_conf")), division=as_str(r.get("team_division")),
+                color=c1, color2=c2,
+                dot_light=dot_color(c1, c2, PAPER_LIGHT), dot_dark=dot_color(c1, c2, PAPER_DARK),
+                logo=logo_path(r["team_abbr"]), logo_dark=logo_path(r["team_abbr"], dark=True),
+            ))
+        return teams
 
     def weeks(self) -> list[WeekInfo]:
         s = self._schedules()
@@ -106,8 +113,7 @@ class NflRepository:
             game=game,
             away_stats=to_team_stats(game.away_team, ts_rows.get(game.away_team), fd_rows.get(game.away_team)),
             home_stats=to_team_stats(game.home_team, ts_rows.get(game.home_team), fd_rows.get(game.home_team)),
-            away_key=self._key_players(game, game.away_team),
-            home_key=self._key_players(game, game.home_team),
+            key_players=self._key_players(game),
         )
 
     def standings(self) -> list[DivisionStandings]:
@@ -158,13 +164,43 @@ class NflRepository:
             totals=totals, games=games,
         )
 
-    def _key_players(self, game: Game, team: str) -> KeyPlayers:
+    def _key_players(self, game: Game) -> MatchKeyPlayers:
         ps = self.cache.get("player_stats")
-        dc = self.cache.get("depth_charts")
-        rw = self.cache.get("rosters")
-        stats = ps.filter((pl.col("game_id") == game.game_id) & (pl.col("team") == team)) \
-            if not ps.is_empty() else ps
-        depth = dc.filter(pl.col("team") == team) if not dc.is_empty() else dc
-        roster = rw.filter((pl.col("team") == team) & (pl.col("week") == game.week)) \
-            if not rw.is_empty() else rw
-        return select_key_players(team, game.gameday or "", game.kickoff_paris, stats, depth, roster)
+        stats = ps.filter(pl.col("game_id") == game.game_id) if not ps.is_empty() else ps
+        pfr = self.cache.get("pfr_def")
+        pressures = pfr.filter(pl.col("game_id") == game.game_id) \
+            if not pfr.is_empty() and "game_id" in pfr.columns else None
+        return select_match_key_players(stats, game.away_team, game.home_team, pressures, game_id=game.game_id,
+                                        away_score=game.away_score, home_score=game.home_score,
+                                        mvp_scale=self.mvp_scale())
+
+    def rankings(self) -> Rankings:
+        """Classements par poste (app/data/rankings.py), recalculés quand le cache change."""
+        version = (self.cache.meta() or {}).get("fetched_at")
+        if getattr(self, "_rankings_version", object()) != version:
+            pfr = self.cache.get("pfr_def")
+            self._rankings = compute_rankings(
+                self.season, self.cache.get("player_stats"), self.cache.get("snap_counts"),
+                self.cache.get("players"), pfr if "game_id" in pfr.columns else None)
+            self._rankings_version = version
+        return self._rankings
+
+    def mvp_scale(self) -> MvpScale:
+        """Distributions de référence du MVP, recalculées quand le cache change.
+        Saison en cours seule, complétée par la précédente en début de saison."""
+        version = (self.cache.meta() or {}).get("fetched_at")
+        if getattr(self, "_mvp_scale_version", object()) == version:
+            return self._mvp_scale
+        cfg = load_config()
+        ps, pfr = self.cache.get("player_stats"), self.cache.get("pfr_def")
+        frames = [(ps, pfr)]
+        seasons = (self.cache.season,)
+        current_games = ps["game_id"].n_unique() if not ps.is_empty() and "game_id" in ps.columns else 0
+        if current_games < cfg["mvp"]["min_reference_games"]:
+            prev = self.cache.get("prev_player_stats")
+            if not prev.is_empty():
+                frames.append((prev, self.cache.get("prev_pfr_def")))
+                seasons = (self.cache.season - 1, self.cache.season)
+        self._mvp_scale = MvpScale.from_stats(frames, cfg, seasons=seasons)
+        self._mvp_scale_version = version
+        return self._mvp_scale

@@ -1,9 +1,9 @@
-"""Contrôle de la logique joueurs clés sur toute la saison en cache.
+"""Affiche les joueurs clés d'un ou plusieurs matchs, avec le détail des scores.
 
-Usage : py -m scripts.check_key_players [game_id]
+Usage : py -m scripts.check_key_players [game_id ...]
+Sans argument : le dernier match terminé de la saison en cache.
 """
 import sys
-from collections import Counter
 
 import nflreadpy as nfl
 import polars as pl
@@ -14,41 +14,47 @@ from app.data.repository import NflRepository
 repo = NflRepository(SeasonCache(nfl.get_current_season()))
 
 
+def n(v) -> float:
+    return v or 0
+
+
 def show(game_id: str) -> None:
     d = repo.game_detail(game_id)
-    g = d.game
-    print(f"\n{g.game_id}  {g.away_team} {g.away_score} - {g.home_score} {g.home_team}")
-    for kp in (d.away_key, d.home_key):
-        print(f"  {kp.team}  schéma {kp.scheme}  snapshot {kp.depth_chart_dt}")
-        for k in kp.offense + kp.edges:
-            name = k.player.name if k.player else "—"
-            note = f"  (remplace {k.replaced_starter}, {k.replaced_reason})" if k.replaced_starter else ""
-            print(f"    {k.label:4} {k.depth_pos or '':5} {name:24} [{k.source}]{note}")
-        tl = kp.tackle_leader
-        print(f"    plaquages : {tl.name if tl else '—'} ({tl.tackles if tl else '—'})")
-        print("    big plays :", ", ".join(
-            f"{p.name} ({'INT ' if p.def_interceptions else ''}{'FF ' if p.fumbles_forced else ''}"
-            f"{str(p.sacks) + ' sk' if p.sacks else ''})".replace(" )", ")") for p in kp.playmakers) or "—")
+    if d is None or d.key_players is None:
+        print(f"\n{game_id} : match introuvable ou pas encore joué")
+        return
+    g, k = d.game, d.key_players
+    print(f"\n{g.game_id}  {g.away_team} {g.away_score} - {g.home_score} {g.home_team}"
+          f"   (pressions PFR : {'oui' if k.pressures_available else 'non'})")
+    for side in (k.away, k.home):
+        print(f"\n  === {side.team} ===")
+        print("  QB")
+        for p in side.quarterbacks:
+            print(f"    {p.team:3} {p.name:24} {n(p.completions)}/{n(p.attempts)}  {n(p.passing_yards)} yds"
+                  f"  {n(p.passing_tds)} TD  {n(p.interceptions)} INT")
+        print("  Top offensif  (yds course + yds réc. + 20 × TD)")
+        for r in side.offense:
+            p = r.player
+            print(f"    {r.rank}. {p.team:3} {p.name:24} {p.position or '':3} {r.score:6.1f}"
+                  f"   course {n(p.rushing_yards):4}  réc. {n(p.receiving_yards):4}"
+                  f"  TD {n(p.rushing_tds) + n(p.receiving_tds)}")
+        print("  Top défensif  (6 INT + 4 sacks + 3 PD + 2 QB hits + 1,5 press. + 1 plaq.)")
+        for r in side.defense:
+            p = r.player
+            press = "—" if p.pressures is None else f"{p.pressures:g}"
+            print(f"    {r.rank}. {p.team:3} {p.name:24} {p.position or '':3} {r.score:6.1f}"
+                  f"   INT {n(p.def_interceptions)}  sacks {n(p.sacks):g}  PD {n(p.passes_defended)}"
+                  f"  hits {n(p.qb_hits)}  press. {press}  plaq. {n(p.tackles)}")
+        print("  Kicker")
+        for p in side.kickers:
+            print(f"    {p.team:3} {p.name:24} FG {n(p.fg_made)}/{n(p.fg_att)}  long {p.fg_long or '—'}"
+                  f"  XP {n(p.pat_made)}/{n(p.pat_att)}")
 
 
-if len(sys.argv) > 1:
-    show(sys.argv[1])
-    sys.exit()
-
-finals = repo._schedules().filter(pl.col("home_score").is_not_null())["game_id"].to_list()
-sources, reasons, none_roles = Counter(), Counter(), Counter()
-for gid in finals:
-    d = repo.game_detail(gid)
-    for kp in (d.away_key, d.home_key):
-        for k in kp.offense + kp.edges:
-            sources[k.source] += 1
-            if k.replaced_reason:
-                reasons[(k.role, k.replaced_reason)] += 1
-            if k.source == "none":
-                none_roles[(kp.team, gid, k.role)] += 1
-print(f"{len(finals)} matchs, {sum(sources.values())} rôles")
-print("sources :", dict(sources))
-print("remplacements (rôle, motif) :", reasons.most_common(15))
-print("rôles vides :", list(none_roles)[:10])
-show(finals[-1])
-show("2026_08_CAR_GB")
+if __name__ == "__main__":
+    ids = sys.argv[1:]
+    if not ids:
+        s = repo.cache.get("schedules").filter(pl.col("home_score").is_not_null())
+        ids = [s.sort("gameday")["game_id"][-1]]
+    for gid in ids:
+        show(gid)

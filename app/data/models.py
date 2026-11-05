@@ -104,38 +104,61 @@ class PlayerLine(BaseModel):
     def_interceptions: int | None = None
     passes_defended: int | None = None
     fumbles_forced: int | None = None
+    pressures: float | None = None  # stats avancées PFR, jointes au match
+    # Coups de pied
+    fg_made: int | None = None
+    fg_att: int | None = None
+    fg_long: int | None = None
+    fg_made_50: int | None = None  # FG réussis de 50 yards ou plus
+    pat_made: int | None = None
+    pat_att: int | None = None
 
 
-class KeyPlayer(BaseModel):
-    role: str  # QB, RB1, WR1, WR2, TE1, EDGE1, EDGE2
-    label: str  # libellé affiché : QB, RB1, WR1, WR2, TE1, DE, OLB
-    depth_pos: str | None = None  # poste du depth chart (LDE, WLB…)
-    player: PlayerLine | None = None
-    # depth_chart : le titulaire du depth chart a joué
-    # replacement : il n'a pas joué, remplacé par le plus productif du poste
-    # fallback    : pas de depth chart, choix sur la production du match
-    # none        : personne à afficher
-    source: Literal["depth_chart", "replacement", "fallback", "none"] = "none"
-    replaced_starter: str | None = None
-    replaced_reason: str | None = None  # « inactif », « en réserve »…
+class RankedPlayer(BaseModel):
+    """Joueur classé (top offensif ou défensif d'un match)."""
+
+    rank: int
+    score: float
+    player: PlayerLine
 
 
-class KeyPlayers(BaseModel):
+class TeamKeyPlayers(BaseModel):
+    """Joueurs clés d'une équipe pour un match (app/data/key_players.py)."""
+
     team: str
-    scheme: str | None = None  # "3-4" ou "4-3"
-    depth_chart_dt: str | None = None
-    offense: list[KeyPlayer] = []
-    edges: list[KeyPlayer] = []
-    tackle_leader: PlayerLine | None = None
-    playmakers: list[PlayerLine] = []  # sack, interception ou fumble forcé
+    quarterbacks: list[PlayerLine] = []
+    offense: list[RankedPlayer] = []
+    defense: list[RankedPlayer] = []
+    kickers: list[PlayerLine] = []
+
+
+class Mvp(BaseModel):
+    """MVP du match (app/data/key_players.py)."""
+
+    player: PlayerLine
+    category: Literal["qb", "offense", "defense", "kicker"]
+    score: float  # score brut de sa catégorie
+    percentile: float  # rang centile dans sa catégorie (0 à 100)
+    normalized: float  # percentile après malus éventuel (kicker) : sert au choix
+
+
+class MatchKeyPlayers(BaseModel):
+    """Joueurs clés d'un match, équipe par équipe."""
+
+    away: TeamKeyPlayers
+    home: TeamKeyPlayers
+    mvp: Mvp | None = None
+    # False : PFR ne couvre pas ce match, le score défensif ignore les pressions.
+    pressures_available: bool = False
+    # Pondérations utilisées (key_players.toml), pour les afficher telles quelles.
+    weights: dict[str, dict[str, float]] = {}
 
 
 class GameDetail(BaseModel):
     game: Game
     away_stats: TeamStats | None = None
     home_stats: TeamStats | None = None
-    away_key: KeyPlayers | None = None
-    home_key: KeyPlayers | None = None
+    key_players: MatchKeyPlayers | None = None
 
 
 class Team(BaseModel):
@@ -146,6 +169,13 @@ class Team(BaseModel):
     division: str | None = None
     color: str | None = None
     color2: str | None = None
+    # Couleur du point d'équipe par thème, choisie selon le contraste avec le
+    # fond (voir app/data/team_assets.py).
+    dot_light: str | None = None
+    dot_dark: str | None = None
+    # Logo local, relatif à la racine du site (logos/KC.png), s'il existe.
+    logo: str | None = None
+    logo_dark: str | None = None  # variante pour fond sombre (logos/dark/KC.png)
 
 
 class StandingRow(BaseModel):
@@ -210,3 +240,32 @@ class Meta(BaseModel):
     fetched_at: datetime | None = None
     current_week: int | None = None
     weeks: list[WeekInfo] = []
+
+
+class RankingRow(BaseModel):
+    """Titulaire d'une équipe à un poste (app/data/rankings.py)."""
+
+    rank: int  # rang par moyenne par match (non éligibles en fin de classement)
+    player_id: str
+    name: str
+    team: str  # équipe où il a le plus joué
+    position: str | None = None  # position de player_stats (affichage)
+    headshot_url: str | None = None
+    games: int  # matchs joués
+    snaps: int | None = None  # snaps de la saison (None pour le kicker)
+    eligible: bool  # au moins min_games matchs joués
+    score_total: float
+    score_avg: float  # score_total / games
+    totals: PlayerLine  # totaux de la saison, toutes équipes confondues
+
+
+class PositionRanking(BaseModel):
+    key: str  # « QB », « EDGE »…
+    score: Literal["qb", "offense", "defense", "kicker"]
+    rows: list[RankingRow] = []
+
+
+class Rankings(BaseModel):
+    season: int
+    min_games: int
+    positions: list[PositionRanking] = []

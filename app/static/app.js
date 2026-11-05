@@ -74,13 +74,29 @@ function weekLabel(week) {
 }
 
 // Animations (anim.js, avec Motion) : facultatives, l'app marche sans.
-const anim = window.GamedayAnim || { leave: async () => {}, enter: () => {} };
+const anim = window.GamedayAnim || { leave: async () => {}, enter: () => {}, show: () => {} };
 
-// Rendu final d'une page (ou d'une erreur) : contenu puis animation d'entrée.
-// Les messages « Chargement… » intermédiaires n'utilisent pas paint().
-function paint(html) {
-  view.innerHTML = html;
-  anim.enter(view);
+// « Chargement… » différé. L'ancien contenu (masqué par le fondu de sortie)
+// garde sa place tant que les données arrivent vite. Le remplacer tout de suite
+// par une ligne de texte faisait s'effondrer la hauteur de la page le temps
+// d'une image : la barre de défilement disparaissait et l'en-tête sautait.
+let loadingTimer = 0;
+function loadingLater(target = view) {
+  clearTimeout(loadingTimer);
+  const seq = state.routeSeq;
+  loadingTimer = setTimeout(() => {
+    if (seq !== state.routeSeq) return;
+    target.innerHTML = `<p class="state-msg">Chargement…</p>`;
+    anim.show(target);
+  }, 300);
+}
+
+// Rendu final d'une page (ou d'une erreur) dans target (la vue entière, ou
+// seulement la liste des matchs d'une semaine) : contenu puis animation d'entrée.
+function paint(html, target = view) {
+  clearTimeout(loadingTimer);
+  target.innerHTML = html;
+  anim.enter(target);
 }
 
 function setMessage(text, isError = false) {
@@ -172,25 +188,22 @@ function weekStrip(current) {
   return `<nav class="week-strip" aria-label="Semaines">${regular.join("")}<span class="strip-sep" aria-hidden="true">|</span>${playoffs.join("")}</nav>`;
 }
 
-// Luminance relative (WCAG) d'une couleur #rrggbb.
-function luminance(hex) {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
-  if (!m) return null;
-  const [r, g, b] = [0, 2, 4].map((i) => {
-    const c = parseInt(m[1].slice(i, i + 2), 16) / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+// Pastille d'équipe : couleur choisie au build pour chaque thème selon son
+// contraste avec le fond (app/data/team_assets.py). Ex. : PIT passe au jaune
+// en thème sombre, NO au noir en thème clair.
+function teamColorStyle(t) {
+  const light = t?.dot_light || t?.color, dark = t?.dot_dark || light;
+  if (!light) return "";
+  return ` style="--team:${esc(light)};--team-dark:${esc(dark)}"`;
 }
 
-// Pastille d'équipe : couleur principale ; en mode sombre, la secondaire si
-// la principale est trop foncée pour se voir sur le fond (PIT, LV, DAL…).
-function teamColorStyle(t) {
-  if (!t?.color) return "";
-  let dark = t.color;
-  const l1 = luminance(t.color), l2 = luminance(t.color2);
-  if (l1 !== null && l1 < 0.05 && l2 !== null && l2 > l1) dark = t.color2;
-  return ` style="--team:${esc(t.color)};--team-dark:${esc(dark)}"`;
+// Logo local (logos/KC.png, variante logos/dark/KC.png en thème sombre),
+// en niveaux de gris ; couleurs d'origine au survol.
+function teamLogo(abbr) {
+  const t = state.teams.get(abbr);
+  if (!t?.logo) return "";
+  const dark = t.logo_dark ? `<source media="(prefers-color-scheme: dark)" srcset="${esc(t.logo_dark)}">` : "";
+  return `<picture class="sb-logo-wrap">${dark}<img class="sb-logo" src="${esc(t.logo)}" alt="${esc(t.name)}" width="88" height="88" decoding="async" onerror="this.closest('picture').remove()"></picture>`;
 }
 
 function teamLine(abbr, score, outcome) {
@@ -250,16 +263,15 @@ function weekSummary({ games, finals }) {
   return `${n} · ${finals} terminé${finals > 1 ? "s" : ""}`;
 }
 
-async function renderWeek(week) {
-  setNav("week");
+// Titre, flèches et sélecteur de semaine. D'une semaine à l'autre, ils restent
+// en place (mêmes éléments, mis à jour sans animation) : seule la liste des
+// matchs (.week-body) fait le fondu.
+function weekHead(week, info) {
   const weeks = state.meta.weeks.map((w) => w.week);
   const idx = weeks.indexOf(week);
   const prev = idx > 0 ? weeks[idx - 1] : null;
   const next = idx >= 0 && idx < weeks.length - 1 ? weeks[idx + 1] : null;
-  const info = state.meta.weeks.find((w) => w.week === week);
-  document.title = `${weekLabel(week)} — NFL Gameday`;
-
-  const head = `
+  return `
     <div class="page-head">
       <h1 class="page-title">${esc(weekLabel(week))}</h1>
       <div class="pager">
@@ -267,23 +279,55 @@ async function renderWeek(week) {
         ${next !== null ? `<a href="#/week/${next}">${esc(weekLabel(next))} →</a>` : `<span class="is-disabled">→</span>`}
       </div>
     </div>
-    ${info ? `<p class="page-sub">${weekSummary(info)}</p>` : ""}
-    ${weekStrip(week)}`;
+    <p class="page-sub">${info ? weekSummary(info) : "&nbsp;"}</p>`;
+}
+
+const metaStamp = () => state.meta?.fetched_at || state.meta?.generated_at || "";
+
+function updateWeekShell(shell, week, info) {
+  shell.querySelector(".week-head").innerHTML = weekHead(week, info);
+  shell.querySelectorAll(".week-strip a").forEach((a) => {
+    if (a.getAttribute("href") === `#/week/${week}`) a.setAttribute("aria-current", "page");
+    else a.removeAttribute("aria-current");
+  });
+  scrollStripToCurrent(false);
+}
+
+async function renderWeek(week) {
+  setNav("week");
+  const info = state.meta.weeks.find((w) => w.week === week);
+  document.title = `${weekLabel(week)} — NFL Gameday`;
+
+  // Coquille déjà affichée (on vient d'une autre semaine) : mise à jour sur
+  // place. Sinon (autre page, ou données rafraîchies) : rendu complet.
+  let shell = view.querySelector(".week-shell");
+  if (shell && shell.dataset.stamp !== metaStamp()) shell = null;
+  if (shell) updateWeekShell(shell, week, info);
+  const body = shell?.querySelector(".week-body");
+  const render = (html) => {
+    if (body) { paint(html, body); return; }
+    paint(`
+      <div class="week-shell" data-stamp="${esc(metaStamp())}">
+        <div class="week-head">${weekHead(week, info)}</div>
+        ${weekStrip(week)}
+        <div class="week-body">${html}</div>
+      </div>`);
+    scrollStripToCurrent(true);
+  };
 
   if (!info) {
-    paint(head + `<p class="state-msg">Cette semaine n'est pas encore au calendrier.</p>`);
+    render(`<p class="state-msg">Cette semaine n'est pas encore au calendrier.</p>`);
     return;
   }
 
-  view.innerHTML = head + `<p class="state-msg">Chargement…</p>`;
-  scrollStripToCurrent();
+  loadingLater(body || view);
   const seq = state.routeSeq;
   let games;
   try {
     games = await api(`/api/weeks/${week}`);
   } catch (err) {
     if (seq !== state.routeSeq) return;
-    paint(head + `<p class="state-msg is-error">Impossible de charger la semaine : ${esc(err.message)}</p>`);
+    render(`<p class="state-msg is-error">Impossible de charger la semaine : ${esc(err.message)}</p>`);
     return;
   }
   if (seq !== state.routeSeq) return; // l'utilisateur a changé de page entre-temps
@@ -296,16 +340,24 @@ async function renderWeek(week) {
       <div class="games">${d.games.map(gameRow).join("")}</div>
     </section>`).join("");
   const byesHtml = week <= 18 && byes.length
-    ? `<p class="byes">Exemptes : ${byes.map(esc).join(", ")}</p>` : "";
+    ? `<p class="byes"><span class="byes-label">Au repos</span>${byes.map((t) => `<span class="bye-team"><span class="pill"${teamColorStyle(state.teams.get(t))} aria-hidden="true"></span>${esc(t)}</span>`).join("")}</p>` : "";
 
-  paint(head + days + byesHtml);
-  scrollStripToCurrent();
+  render(days + byesHtml);
 }
 
-function scrollStripToCurrent() {
+// Semaine courante visible dans le sélecteur (utile sur mobile, où il défile).
+// Premier affichage : centrage immédiat. Ensuite : seulement si elle sort du
+// cadre, en douceur.
+function scrollStripToCurrent(initial) {
   const strip = view.querySelector(".week-strip");
   const cur = strip?.querySelector('[aria-current="page"]');
-  if (strip && cur) strip.scrollLeft = cur.offsetLeft - strip.clientWidth / 2 + cur.clientWidth / 2;
+  if (!strip || !cur) return;
+  const left = cur.offsetLeft - strip.clientWidth / 2 + cur.clientWidth / 2;
+  if (initial) { strip.scrollLeft = left; return; }
+  const outside = cur.offsetLeft < strip.scrollLeft || cur.offsetLeft + cur.clientWidth > strip.scrollLeft + strip.clientWidth;
+  if (!outside) return;
+  const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  strip.scrollTo({ left, behavior: smooth ? "smooth" : "auto" });
 }
 
 // --- Page match ---------------------------------------------------------
@@ -349,10 +401,8 @@ const TEAM_ROWS = [
   { label: "Yards à la course", get: (s) => s.rushing_yards, better: "high" },
   { label: "Passes complétées", get: (s) => s.completions, fmt: (s) => s.completions == null ? "—" : `${s.completions}/${dash(s.attempts)}`, better: null },
   { label: "Courses", get: (s) => s.carries, better: null },
-  { label: "1ers downs", get: (s) => s.first_downs, better: "high" },
-  { label: "Turnovers", get: (s) => s.turnovers, better: "low" },
-  { label: "Sacks subis", get: (s) => s.sacks_suffered, fmt: (s) => s.sacks_suffered == null ? "—" : `${s.sacks_suffered}${s.sack_yards_lost ? ` <span class="sub">−${s.sack_yards_lost}</span>` : ""}`, better: "low" },
-  { label: "Pénalités", get: (s) => s.penalties, fmt: (s) => s.penalties == null ? "—" : `${s.penalties} <span class="sub">${dash(s.penalty_yards)} yds</span>`, better: "low" },
+  { label: "Sacks subis", get: (s) => s.sacks_suffered, better: "low" },
+  { label: "Pénalités", get: (s) => s.penalties, better: "low" },
 ];
 
 function teamStatsTable(g, a, h) {
@@ -381,92 +431,147 @@ function statCells(cells) {
   return `<dl class="stat-cells">${cells.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("")}</dl>`;
 }
 
-function roleStats(role, p) {
-  if (role === "QB") {
-    return statCells([
-      ["C/A", p.completions == null ? "—" : `${p.completions}/${dash(p.attempts)}`],
-      ["Yds", num(p.passing_yards)], ["TD", num(p.passing_tds)], ["INT", num(p.interceptions)],
-      ["Sacks", num(p.sacks_suffered)], ["Course", p.carries ? `${p.carries}–${num(p.rushing_yards)}` : "—"],
-    ]);
-  }
-  if (role === "RB1") {
-    const avg = p.carries ? (p.rushing_yards ?? 0) / p.carries : null;
-    return statCells([
-      ["Courses", num(p.carries)], ["Yds", num(p.rushing_yards)], ["Moy.", num(avg)],
-      ["TD", num(p.rushing_tds)], ["Réc.", num(p.receptions)],
-    ]);
-  }
-  if (role.startsWith("EDGE")) {
-    return statCells([
-      ["Plaq.", num(p.tackles)], ["Sacks", num(p.sacks)], ["QB hits", num(p.qb_hits)], ["TFL", num(p.tackles_for_loss)],
-    ]);
-  }
+// --- Portraits -----------------------------------------------------------
+// nflverse donne l'original du CDN de la NFL : un PNG de 3400 × 2450 px
+// (4 à 6 Mo) au format paysage. Réduit d'un coup à 36 px, il crénelait, et le
+// visage n'occupait qu'une petite partie du cercle. On demande au même CDN,
+// pour la même image, un carré recadré sur le visage (c_thumb,g_face) à 4 fois
+// la taille affichée, en qualité maximale (q_auto:best).
+const HEADSHOT_RE = /^(https:\/\/static\.www\.nfl\.com\/image\/(?:upload|private))\/[^/]+\/(league\/[^?#]+)$/;
+const HEADSHOT_SIZES = { sm: 36, lg: 84 };
+
+function headshotUrl(url, px) {
+  const m = HEADSHOT_RE.exec(url || "");
+  return m ? `${m[1]}/c_thumb,g_face,w_${px},h_${px},f_auto,q_auto:best/${m[2]}` : url;
+}
+
+// Repli : silhouette neutre, à la même taille que le portrait.
+function silhouette(cls) {
+  return `<span class="${cls} is-empty" aria-hidden="true"><svg viewBox="0 0 36 36" focusable="false"><circle cx="18" cy="14" r="6.5"/><path d="M5 36c1-8 6.5-12 13-12s12 4 13 12z"/></svg></span>`;
+}
+
+function headshotFallback(img) {
+  img.outerHTML = silhouette(img.className);
+}
+
+function headshot(p, size = "sm") {
+  const cls = size === "lg" ? "headshot headshot-lg" : "headshot";
+  const dim = HEADSHOT_SIZES[size];
+  if (!p?.headshot_url) return silhouette(cls);
+  return `<img class="${cls}" src="${esc(headshotUrl(p.headshot_url, dim * 4))}" width="${dim}" height="${dim}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="headshotFallback(this)">`;
+}
+
+// --- Joueurs clés (app/data/key_players.py) ------------------------------
+const fmtW = (v) => nf1.format(v);
+const made = (m, a) => (a ? `${m ?? 0}/${a}` : "—");
+
+function qbStats(p) {
   return statCells([
-    ["Cibles", num(p.targets)], ["Réc.", num(p.receptions)], ["Yds", num(p.receiving_yards)], ["TD", num(p.receiving_tds)],
+    ["C/A", made(p.completions, p.attempts)], ["Yds", num(p.passing_yards)], ["TD", num(p.passing_tds)],
+    ["INT", num(p.interceptions)], ["Sacks", num(p.sacks_suffered)],
+    ["Course", p.carries ? `${p.carries}–${num(p.rushing_yards)}` : "—"],
   ]);
 }
 
-function headshot(p) {
-  if (!p.headshot_url) return `<span class="headshot is-empty" aria-hidden="true"></span>`;
-  return `<img class="headshot" src="${esc(p.headshot_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'headshot is-empty'}))">`;
+// Seules les stats qui comptent pour ce joueur : course s'il a couru,
+// réception s'il a été ciblé, et ses TD.
+function offenseStats(p) {
+  const cells = [];
+  if (p.carries) cells.push(["Courses", num(p.carries)], ["Yds course", num(p.rushing_yards)]);
+  if (p.targets || p.receptions) cells.push(["Réc.", made(p.receptions, p.targets)], ["Yds réc.", num(p.receiving_yards)]);
+  cells.push(["TD", num((p.rushing_tds || 0) + (p.receiving_tds || 0))]);
+  return statCells(cells);
 }
 
-function playerCard(k) {
-  const pos = k.depth_pos && k.depth_pos !== k.label ? `<span class="card-pos">${esc(k.depth_pos)}</span>` : "";
-  const note = k.replaced_starter
-    ? `<p class="card-note">Remplace ${esc(k.replaced_starter)} (${esc(k.replaced_reason || "absent")})</p>`
-    : k.source === "fallback" ? `<p class="card-note">Choisi d'après la production du match</p>` : "";
-  if (!k.player) {
-    return `
-      <article class="card">
-        <h4 class="card-role">${esc(k.label)}${pos}</h4>
-        <p class="card-name is-empty">—</p>${note}
-      </article>`;
-  }
-  const p = k.player;
+function defenseStats(p, withPressures) {
+  return statCells([
+    ["Plaq.", num(p.tackles)], ["Sacks", num(p.sacks)], ["INT", num(p.def_interceptions)],
+    ["PD", num(p.passes_defended)], ["QB hits", num(p.qb_hits)],
+    ...(withPressures ? [["Press.", num(p.pressures)]] : []),
+  ]);
+}
+
+function kickerStats(p) {
+  return statCells([["FG", made(p.fg_made, p.fg_att)], ["Long", p.fg_att ? num(p.fg_long) : "—"], ["XP", made(p.pat_made, p.pat_att)]]);
+}
+
+// Carte joueur : rôle, poste, portrait et stats. L'équipe est donnée par la
+// colonne (une par équipe), inutile de la répéter sur chaque carte.
+// MVP : badge « MVP » et fin liseré à la couleur de son équipe.
+function keyCard(p, role, stats, extra = "", mvp = false) {
+  const pos = p.position && p.position !== role ? esc(p.position) : "";
+  const meta = [pos, extra].filter(Boolean).join(" · ");
+  const badge = mvp ? `<span class="mvp-badge">MVP</span>` : "";
   return `
-    <article class="card">
-      <h4 class="card-role">${esc(k.label)}${pos}</h4>
+    <article class="card${mvp ? " is-mvp" : ""}"${mvp ? teamColorStyle(state.teams.get(p.team)) : ""}>
+      <h4 class="card-role">${esc(role)}${meta ? `<span class="card-pos">${meta}</span>` : ""}${badge}</h4>
       <div class="card-head">${headshot(p)}<p class="card-name">${playerLink(p)}</p></div>
-      ${roleStats(k.role, p)}
-      ${note}
+      ${stats}
     </article>`;
 }
 
-function bigPlays(list) {
-  if (!list.length) return `<p class="state-msg">Aucun sack, interception ni fumble forcé.</p>`;
-  const what = (p) => [
-    p.def_interceptions ? `${num(p.def_interceptions)} INT` : "",
-    p.fumbles_forced ? `${num(p.fumbles_forced)} FF` : "",
-    p.sacks ? `${num(p.sacks)} sack${p.sacks > 1 ? "s" : ""}` : "",
-  ].filter(Boolean).join(" · ");
-  return `<ul class="big-plays">${list.map((p) => `
-    <li><span class="bp-name">${playerLink(p)} <span class="bp-pos">${esc(p.position || "")}</span></span><span class="bp-what">${what(p)}</span></li>`).join("")}</ul>`;
+// Joueurs clés : une rangée par catégorie (QB, offensive, défense, kicker),
+// l'équipe à l'extérieur à gauche, celle à domicile à droite, comme dans le
+// tableau de score. Les deux cellules d'une rangée partagent la même ligne de
+// grille : chaque catégorie commence à la même hauteur pour les deux équipes,
+// et la rangée prend la hauteur de la cellule la plus remplie.
+// Sur mobile, une seule colonne dans le même ordre (catégorie par catégorie,
+// extérieur puis domicile) ; chaque cellule rappelle alors son équipe.
+function teamLabel(abbr, cls) {
+  const t = state.teams.get(abbr);
+  return `<span class="${cls}"><span class="pill"${teamColorStyle(t)} aria-hidden="true"></span>${esc(teamName(abbr))}</span>`;
 }
 
-function keyPlayersColumn(abbr, kp) {
-  if (!kp) return "";
-  const t = state.teams.get(abbr);
-  const tl = kp.tackle_leader;
-  const scheme = kp.scheme ? `<span class="scheme">· ${esc(kp.scheme)}</span>` : "";
+function keyCell(team, cards, empty) {
   return `
-    <div class="kp-col">
-      <h3 class="kp-team"><span class="pill"${teamColorStyle(t)} aria-hidden="true"></span>${esc(teamName(abbr))}</h3>
-      <h4 class="kp-sub">Attaque</h4>
-      <div class="cards">${kp.offense.map(playerCard).join("")}</div>
-      <h4 class="kp-sub">Défense ${scheme}</h4>
-      <div class="cards">
-        ${kp.edges.map(playerCard).join("")}
-        <article class="card">
-          <h4 class="card-role">Meilleur plaqueur</h4>
-          ${tl ? `<div class="card-head">${headshot(tl)}<p class="card-name">${playerLink(tl)} <span class="bp-pos">${esc(tl.position || "")}</span></p></div>
-            ${statCells([["Plaq.", num(tl.tackles)], ["Solo", num(tl.tackles_solo)], ["Ast.", num(tl.tackle_assists)], ["TFL", num(tl.tackles_for_loss)]])}`
-            : `<p class="card-name is-empty">—</p>`}
-        </article>
-      </div>
-      <h4 class="kp-sub">Sacks, interceptions, fumbles forcés</h4>
-      ${bigPlays(kp.playmakers)}
+    <div class="kp-cell">
+      ${teamLabel(team, "kp-cell-team")}
+      ${cards.length ? cards.join("") : `<p class="kp-empty">${empty}</p>`}
     </div>`;
+}
+
+function keyPlayers(k) {
+  if (!k) return "";
+  const wo = k.weights?.offense || {}, wd = k.weights?.defense || {};
+  const pts = (r) => `${fmtW(r.score)} pts`;
+  const { away, home } = k;
+  const plural = (n, one, many) => (n > 1 ? many : one);
+  // Le MVP garde sa place dans sa catégorie ; seule sa carte est marquée.
+  const isMvp = (p, category) => k.mvp?.category === category && k.mvp.player.player_id === p.player_id;
+  const rows = [
+    {
+      title: plural(Math.max(away.quarterbacks.length, home.quarterbacks.length), "Quarterback", "Quarterbacks"),
+      cards: (s) => s.quarterbacks.map((p) => keyCard(p, "QB", qbStats(p), "", isMvp(p, "qb"))),
+      empty: "Aucune passe tentée.",
+    },
+    {
+      title: `Top ${wo.top ?? 5} offensif`,
+      cards: (s) => s.offense.map((r) => keyCard(r.player, `N° ${r.rank}`, offenseStats(r.player), pts(r), isMvp(r.player, "offense"))),
+      empty: "Aucun joueur offensif avec des stats.",
+    },
+    {
+      title: `Top ${wd.top ?? 3} défensif`,
+      cards: (s) => s.defense.map((r) => keyCard(r.player, `N° ${r.rank}`, defenseStats(r.player, k.pressures_available), pts(r), isMvp(r.player, "defense"))),
+      empty: "Aucun joueur défensif avec des stats.",
+    },
+    {
+      title: plural(Math.max(away.kickers.length, home.kickers.length), "Kicker", "Kickers"),
+      cards: (s) => s.kickers.map((p) => keyCard(p, "K", kickerStats(p), "", isMvp(p, "kicker"))),
+      empty: "Aucun coup de pied tenté.",
+    },
+  ];
+  return `
+    <section class="block key-players">
+      <h2 class="section-title">Joueurs clés</h2>
+      <div class="kp-grid">
+        <h3 class="kp-team">${teamLabel(away.team, "kp-team-inner")}</h3>
+        <h3 class="kp-team">${teamLabel(home.team, "kp-team-inner")}</h3>
+        ${rows.map((r) => `
+          <h4 class="kp-sub kp-row-title">${r.title}</h4>
+          ${keyCell(away.team, r.cards(away), r.empty)}
+          ${keyCell(home.team, r.cards(home), r.empty)}`).join("")}
+      </div>
+    </section>`;
 }
 
 function scoreboard(g) {
@@ -478,22 +583,23 @@ function scoreboard(g) {
     aw = g.away_score > g.home_score ? "is-winner" : "is-loser";
     hw = g.away_score > g.home_score ? "is-loser" : "is-winner";
   }
-  const side = (abbr, score, cls, align) => `
-    <div class="sb-team ${cls} ${align}">
-      <span class="sb-abbr">${esc(abbr)}</span>
-      <span class="sb-name">${esc(teamName(abbr))}</span>
-    </div>
-    ${final ? `<span class="sb-score ${cls}">${dash(score)}</span>` : ""}`;
+  // Équipe gagnante : sa couleur sert de fin liseré sous son abréviation.
+  const team = (abbr, cls, align) => `
+    <div class="sb-team ${cls} ${align}"${cls === "is-winner" ? teamColorStyle(state.teams.get(abbr)) : ""}>
+      ${teamLogo(abbr)}
+      <div class="sb-text">
+        <span class="sb-abbr">${esc(abbr)}</span>
+        <span class="sb-name">${esc(teamName(abbr))}</span>
+      </div>
+    </div>`;
   return `
     <p class="eyebrow">${esc(g.week_label)} · ${esc(when)}</p>
     <div class="scoreboard ${final ? "" : "is-scheduled"}">
-      ${side(g.away_team, g.away_score, aw, "left")}
+      ${team(g.away_team, aw, "left")}
+      ${final ? `<span class="sb-score ${aw}">${dash(g.away_score)}</span>` : ""}
       <span class="sb-sep">${final ? "–" : "@"}</span>
       ${final ? `<span class="sb-score ${hw}">${dash(g.home_score)}</span>` : ""}
-      <div class="sb-team ${hw} right">
-        <span class="sb-abbr">${esc(g.home_team)}</span>
-        <span class="sb-name">${esc(teamName(g.home_team))}</span>
-      </div>
+      ${team(g.home_team, hw, "right")}
     </div>
     <p class="sb-status">${final ? (g.overtime ? "Final après prolongation" : "Final") : "Match à venir, heure de Paris"}</p>
     ${quarterTable(g)}
@@ -502,7 +608,7 @@ function scoreboard(g) {
 
 async function renderGame(gameId) {
   setNav("week");
-  setMessage("Chargement…");
+  loadingLater();
   const seq = state.routeSeq;
   let d;
   try {
@@ -516,10 +622,7 @@ async function renderGame(gameId) {
   document.title = `${g.away_team} – ${g.home_team}, ${g.week_label} — NFL Gameday`;
   const body = g.status === "final"
     ? `${teamStatsTable(g, d.away_stats, d.home_stats)}
-       <section class="block">
-         <h2 class="section-title">Joueurs clés</h2>
-         <div class="kp-grid">${keyPlayersColumn(g.away_team, d.away_key)}${keyPlayersColumn(g.home_team, d.home_key)}</div>
-       </section>`
+       ${keyPlayers(d.key_players)}`
     : "";
   paint(`
     <a class="back" href="#/week/${g.week}">← ${esc(g.week_label)}</a>
@@ -569,8 +672,8 @@ function standingsTable(d) {
 
 async function renderStandings() {
   setNav("standings");
-  document.title = "Classement — NFL Gameday";
-  setMessage("Chargement…");
+  document.title = "Classement des équipes — NFL Gameday";
+  loadingLater();
   const seq = state.routeSeq;
   let divisions;
   try {
@@ -586,9 +689,110 @@ async function renderStandings() {
       ${divisions.filter((d) => d.conference === c).map(standingsTable).join("")}
     </section>`;
   paint(`
-    <div class="page-head"><h1 class="page-title">Classement</h1></div>
+    <div class="page-head"><h1 class="page-title">Équipes</h1></div>
     <p class="page-sub">Saison régulière ${state.meta.season}, calculé à partir des résultats. Départage simplifié : confrontations directes, division, conférence, différence de points.</p>
     ${conf("AFC")}${conf("NFC")}`);
+}
+
+// --- Stats par poste (fiches joueurs et classements) ---------------------
+// Les mêmes colonnes servent au résumé de saison, au tableau match par match
+// et à l'onglet Classements. Types : "count" (somme, ou moyenne par match),
+// "pct" (ratio, jamais divisé), "made" (réussis/tentés), "max" (plus long FG).
+const OFF_POSITIONS = new Set(["RB", "HB", "FB", "WR", "TE"]);
+const DEF_POSITIONS = new Set(["DE", "DT", "NT", "DL", "DI", "ED", "EDGE", "LB", "ILB", "MLB", "OLB",
+  "CB", "DB", "S", "FS", "SS", "SAF"]);
+const col = (k, title, f, type = "count") => ({ k, title, f, type });
+const STAT_GROUPS = {
+  qb: [
+    { label: "Passe", cols: [
+      col("Yds", "Yards à la passe", (l) => l.passing_yards),
+      col("TD", "TD à la passe", (l) => l.passing_tds),
+      col("INT", "Interceptions", (l) => l.interceptions),
+      col("Comp.", "Pourcentage de passes complétées", (l) => (l.attempts ? (100 * (l.completions || 0)) / l.attempts : null), "pct"),
+    ] },
+    { label: "Course", cols: [
+      col("Yds", "Yards à la course", (l) => l.rushing_yards),
+      col("TD", "TD à la course", (l) => l.rushing_tds),
+    ] },
+  ],
+  offense: [
+    { label: "Réception", cols: [
+      col("Yds", "Yards en réception", (l) => l.receiving_yards),
+      col("TD", "TD en réception", (l) => l.receiving_tds),
+    ] },
+    { label: "Course", cols: [
+      col("Yds", "Yards à la course", (l) => l.rushing_yards),
+      col("TD", "TD à la course", (l) => l.rushing_tds),
+    ] },
+  ],
+  defense: [
+    { label: "Défense", cols: [
+      col("Plaq.", "Plaquages (solo + assistés)", (l) => l.tackles),
+      col("Sacks", "Sacks", (l) => l.sacks),
+      col("QB hits", "QB hits", (l) => l.qb_hits),
+      col("INT", "Interceptions", (l) => l.def_interceptions),
+      col("PD", "Passes déviées", (l) => l.passes_defended),
+    ] },
+  ],
+  kicker: [
+    { label: "Coups de pied", cols: [
+      col("FG", "Field goals réussis / tentés", (l) => [l.fg_made, l.fg_att], "made"),
+      col("Long", "Plus long field goal réussi", (l) => l.fg_long, "max"),
+      col("XP", "Extra points réussis / tentés", (l) => [l.pat_made, l.pat_att], "made"),
+    ] },
+  ],
+};
+
+// Fiche joueur : type de résumé selon le poste (null : fiche d'origine,
+// pour les kickers, punters, joueurs de ligne…).
+function statKind(position) {
+  if (position === "QB") return "qb";
+  if (OFF_POSITIONS.has(position)) return "offense";
+  if (DEF_POSITIONS.has(position)) return "defense";
+  return null;
+}
+
+const nfAvg = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+// Valeur affichée. games : diviseur en mode « moyenne par match » (sinon null).
+function statText(c, l, games = null) {
+  const v = c.f(l);
+  const fmt = (x) => (games ? nfAvg.format(x / games) : nf1.format(x));
+  if (c.type === "pct") return v === null || v === undefined ? "—" : `${nfAvg.format(v)} %`;
+  if (c.type === "made") return v[1] ? `${fmt(v[0] || 0)}/${fmt(v[1])}` : "—";
+  if (c.type === "max") return num(v);
+  return v === null || v === undefined ? "—" : fmt(v);
+}
+
+function statSortValue(c, l, games = null) {
+  let v = c.f(l);
+  if (c.type === "made") v = v[0];
+  if (v === null || v === undefined) return -Infinity;
+  return games && (c.type === "count" || c.type === "made") ? v / games : v;
+}
+
+// Petit logo d'équipe (tableaux), abréviation en texte alternatif et en
+// infobulle ; l'abréviation seule si le logo manque.
+function smallLogo(abbr, px = 22) {
+  const t = state.teams.get(abbr);
+  if (!t?.logo) return `<span class="abbr-fallback">${esc(abbr)}</span>`;
+  const dark = t.logo_dark ? `<source media="(prefers-color-scheme: dark)" srcset="${esc(t.logo_dark)}">` : "";
+  return `<picture class="mini-logo-wrap">${dark}<img class="mini-logo" src="${esc(t.logo)}" alt="${esc(abbr)}" title="${esc(abbr)}" width="${px}" height="${px}" loading="lazy" decoding="async" onerror="logoFallback(this)"></picture>`;
+}
+
+function logoFallback(img) {
+  img.closest("picture").outerHTML = `<span class="abbr-fallback">${esc(img.alt)}</span>`;
+}
+
+// En-têtes à deux niveaux : groupes (« Passe », « Course ») puis colonnes.
+// Un seul groupe : pas de ligne de groupe. lead : colonnes avant les stats.
+function groupedHead(groups, lead, colTh) {
+  const multi = groups.length > 1;
+  const grp = multi
+    ? `<tr class="grp-row"><th colspan="${lead}"></th>${groups.map((g) => `<th scope="colgroup" colspan="${g.cols.length}" class="grp-start">${esc(g.label)}</th>`).join("")}<th></th></tr>`
+    : "";
+  const cols = groups.flatMap((g, gi) => g.cols.map((c, i) => colTh(c, i === 0 && (multi || gi > 0), `${gi}.${i}`))).join("");
+  return { grp, cols };
 }
 
 // --- Page joueur --------------------------------------------------------
@@ -641,7 +845,7 @@ function categoryOrder(position) {
 
 async function renderPlayer(playerId) {
   setNav(null);
-  setMessage("Chargement…");
+  loadingLater();
   const seq = state.routeSeq;
   let p;
   try {
@@ -652,6 +856,8 @@ async function renderPlayer(playerId) {
   }
   if (seq !== state.routeSeq) return;
   document.title = `${p.name} — NFL Gameday`;
+  const kind = statKind(p.position);
+  if (kind) { paint(playerPage(p, kind)); return; }
 
   const cats = categoryOrder(p.position).filter((c) => CATEGORIES[c].has(p.totals));
   const logCats = cats.slice(0, 2); // le journal de matchs garde les deux catégories principales
@@ -680,7 +886,7 @@ async function renderPlayer(playerId) {
   paint(`
     <button type="button" class="back link-plain" onclick="history.length > 1 ? history.back() : (location.hash = '#/')">← Retour</button>
     <header class="player-head">
-      ${p.headshot_url ? `<img class="headshot headshot-lg" src="${esc(p.headshot_url)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
+      ${headshot(p, "lg")}
       <div>
         <h1 class="page-title player-name">${esc(p.name)}</h1>
         <p class="page-sub">${[esc(p.position || ""), teams, `${p.games_played} match${p.games_played > 1 ? "s" : ""}`].filter(Boolean).join(" · ")}</p>
@@ -704,6 +910,256 @@ async function renderPlayer(playerId) {
     </section>`);
 }
 
+function playerHeader(p) {
+  const teams = p.teams.map((t) => esc(teamName(t))).join(", ");
+  return `
+    <button type="button" class="back link-plain" onclick="history.length > 1 ? history.back() : (location.hash = '#/')">← Retour</button>
+    <header class="player-head">
+      ${headshot(p, "lg")}
+      <div>
+        <h1 class="page-title player-name">${esc(p.name)}</h1>
+        <p class="page-sub">${[esc(p.position || ""), teams, `${p.games_played} match${p.games_played > 1 ? "s" : ""}`].filter(Boolean).join(" · ")}</p>
+      </div>
+    </header>`;
+}
+
+// Fiche QB, offensif ou défensif : seulement les stats clés du poste, dans
+// le résumé comme dans le tableau match par match.
+function playerPage(p, kind) {
+  const groups = STAT_GROUPS[kind];
+  const multi = groups.length > 1;
+  const totals = groups.map((g) => `
+    <div class="totals-group">
+      ${multi ? `<h3 class="kp-sub">${esc(g.label)}</h3>` : ""}
+      ${statCells(g.cols.map((c) => [`<span title="${esc(c.title)}">${c.k === "Yds" ? "Yards" : esc(c.k)}</span>`, statText(c, p.totals)]))}
+    </div>`).join("");
+
+  const { grp, cols } = groupedHead(groups, 3, (c, start) =>
+    `<th scope="col" title="${esc(c.title)}"${start ? ' class="grp-start"' : ""}>${esc(c.k)}</th>`);
+  const rows = p.games.map((g) => {
+    const res = g.result ? `${g.result} ${dash(g.team_score)}-${dash(g.opponent_score)}` : "—";
+    const label = { V: "Victoire", D: "Défaite", N: "Match nul" }[g.result] || "";
+    const cells = groups.flatMap((gr, gi) => gr.cols.map((c, i) =>
+      `<td${i === 0 && (multi || gi > 0) ? ' class="grp-start"' : ""}>${statText(c, g.line)}</td>`)).join("");
+    return `
+      <tr>
+        <th scope="row"><a href="#/game/${esc(g.game_id)}">${esc(g.week_label.replace("Week ", "S"))}</a></th>
+        <td class="gl-opp"><span class="gl-ha" title="${g.home ? "À domicile" : "À l'extérieur"}">${g.home ? "vs" : "@"}</span>${smallLogo(g.opponent)}</td>
+        <td class="gl-res is-${g.result || "none"}"${label ? ` title="${label}"` : ""}>${res}</td>
+        ${cells}
+      </tr>`;
+  }).join("");
+
+  return `
+    ${playerHeader(p)}
+    <section class="block">
+      <h2 class="section-title">Saison ${state.meta.season}</h2>
+      <div class="totals-row">${totals}</div>
+    </section>
+    <section class="block">
+      <h2 class="section-title">Match par match</h2>
+      <div class="table-scroll">
+        <table class="game-log game-log-key">
+          <thead>
+            ${grp.replace("<th></th></tr>", "</tr>")}
+            <tr><th scope="col">Sem.</th><th scope="col">Adv.</th><th scope="col">Rés.</th>${cols}</tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+// --- Classements par poste (app/data/rankings.py) -------------------------
+const RK_TITLES = {
+  QB: "Quarterbacks", RB: "Running backs", WR: "Wide receivers", TE: "Tight ends",
+  EDGE: "Edge rushers", DT: "Defensive tackles", LB: "Linebackers", CB: "Cornerbacks",
+  S: "Safeties", K: "Kickers",
+};
+// mode : "avg" (moyenne par match, critère du classement) ou "total".
+// sort : colonne triée ("rank", "name", "team", "games", "score" ou "g.i").
+state.rk = { data: null, stamp: null, mode: "avg", sort: { key: "rank", desc: false } };
+
+async function loadRankings() {
+  if (state.rk.data && state.rk.stamp === metaStamp()) return state.rk.data;
+  const d = await api("/api/rankings");
+  state.rk.data = d;
+  state.rk.stamp = metaStamp();
+  return d;
+}
+
+const rkScore = (r) => (state.rk.mode === "avg" ? r.score_avg : r.score_total);
+
+// Rang selon le mode : score décroissant, joueurs sous le minimum de matchs
+// à la fin ; puis tri d'affichage choisi (ils restent à la fin).
+function rkRanked(pos) {
+  const other = (r) => (state.rk.mode === "avg" ? r.score_total : r.score_avg);
+  const ranked = [...pos.rows].sort((a, b) => (b.eligible - a.eligible) || rkScore(b) - rkScore(a)
+    || other(b) - other(a) || a.name.localeCompare(b.name, "fr"));
+  ranked.forEach((r, i) => { r.rk = i + 1; });
+  const { key, desc } = state.rk.sort;
+  if (key === "rank") return desc ? [...ranked].reverse().sort((a, b) => b.eligible - a.eligible) : ranked;
+  const groups = STAT_GROUPS[pos.score];
+  const games = (r) => (state.rk.mode === "avg" ? r.games : null);
+  let val;
+  if (key === "name") val = (r) => r.name;
+  else if (key === "team") val = (r) => r.team;
+  else if (key === "games") val = (r) => r.games;
+  else if (key === "score") val = rkScore;
+  else {
+    const [gi, i] = key.split(".").map(Number);
+    const c = groups[gi].cols[i];
+    val = (r) => statSortValue(c, r.totals, games(r));
+  }
+  const cmp = (a, b) => {
+    const x = val(a), y = val(b);
+    const d = typeof x === "string" ? x.localeCompare(y, "fr") : x - y;
+    return desc ? -d : d;
+  };
+  return ranked.sort((a, b) => (b.eligible - a.eligible) || cmp(a, b) || a.rk - b.rk);
+}
+
+function rkTable(pos, minGames) {
+  const groups = STAT_GROUPS[pos.score];
+  const { key, desc } = state.rk.sort;
+  const avg = state.rk.mode === "avg";
+  const th = (k, label, title, cls = "") => {
+    const sorted = key === k;
+    const aria = sorted ? ` aria-sort="${desc ? "descending" : "ascending"}"` : "";
+    return `<th scope="col"${cls ? ` class="${cls}"` : ""}${aria}><button type="button" class="rk-sort" data-sort="${k}" title="${esc(title)}">${label}</button></th>`;
+  };
+  const { grp, cols } = groupedHead(groups, 5, (c, start, k) => th(k, esc(c.k), c.title, start ? "grp-start" : ""));
+  const rows = rkRanked(pos).map((r) => {
+    const g = avg ? r.games : null;
+    const cells = groups.flatMap((gr, gi) => gr.cols.map((c, i) =>
+      `<td${i === 0 && (groups.length > 1 || gi > 0) ? ' class="grp-start"' : ""}>${statText(c, r.totals, g)}</td>`)).join("");
+    const low = r.eligible ? "" : ` class="is-low" title="Moins de ${minGames} matchs joués"`;
+    return `
+      <tr data-href="#/player/${encodeURIComponent(r.player_id)}"${low}>
+        <td class="rk-rank">${r.rk}</td>
+        <td class="rk-photo">${headshot(r)}</td>
+        <th scope="row" class="rk-name"><a class="player-link" href="#/player/${encodeURIComponent(r.player_id)}">${esc(r.name)}</a></th>
+        <td class="rk-team">${smallLogo(r.team)}</td>
+        <td>${r.games}</td>
+        ${cells}
+        <td class="rk-score">${nfAvg.format(rkScore(r))}</td>
+      </tr>`;
+  }).join("");
+  return `
+    <div class="table-scroll">
+      <table class="rankings">
+        <thead>
+          ${grp}
+          <tr>
+            ${th("rank", "#", "Rang")}
+            <th scope="col" class="rk-photo"><span class="visually-hidden">Portrait</span></th>
+            ${th("name", "Joueur", "Nom", "rk-name")}
+            ${th("team", "Équipe", "Équipe", "rk-team")}
+            ${th("games", "MJ", "Matchs joués")}
+            ${cols}
+            ${th("score", "Score", avg ? "Score moyen par match" : "Score total de la saison", "rk-score")}
+          </tr>
+        </thead>
+        <tbody>${rows || `<tr><td colspan="${6 + groups.reduce((n, gr) => n + gr.cols.length, 0)}" class="state-msg">Aucun joueur.</td></tr>`}</tbody>
+      </table>
+    </div>`;
+}
+
+function rkStrip(data, current) {
+  return `
+    <nav class="week-strip rk-strip" aria-label="Poste">
+      ${data.positions.map((p) => `<a href="#/rankings/${esc(p.key)}" title="${esc(RK_TITLES[p.key] || p.key)}"${p.key === current ? ' aria-current="page"' : ""}>${esc(p.key)}</a>`).join("")}
+    </nav>`;
+}
+
+function rkTools() {
+  const b = (mode, label) => `<button type="button" class="link-plain" data-mode="${mode}" aria-pressed="${state.rk.mode === mode}">${label}</button>`;
+  return `<div class="rk-toggle" role="group" aria-label="Valeurs affichées">${b("total", "Total saison")}<span aria-hidden="true">/</span>${b("avg", "Moyenne par match")}</div>`;
+}
+
+function rkSub(pos, data) {
+  const what = pos.score === "kicker" ? "le plus de matchs joués" : "le plus de snaps sur la saison";
+  return `${esc(RK_TITLES[pos.key] || pos.key)} · le titulaire de chaque équipe (${what}), classé sur le score du poste. Moins de ${data.min_games} matchs joués : en fin de classement.`;
+}
+
+async function renderRankings(key) {
+  setNav("rankings");
+  let shell = view.querySelector(".rk-shell");
+  if (shell && shell.dataset.stamp !== metaStamp()) shell = null;
+  const body = shell?.querySelector(".rk-body");
+  loadingLater(body || view);
+  const seq = state.routeSeq;
+  let data;
+  try {
+    data = await loadRankings();
+  } catch (err) {
+    if (seq === state.routeSeq) setMessage(`Impossible de charger les classements : ${err.message}`, true);
+    return;
+  }
+  if (seq !== state.routeSeq) return;
+  const pos = data.positions.find((p) => p.key === key) || data.positions[0];
+  if (!pos) { setMessage("Classements indisponibles.", true); return; }
+  if (state.rk.pos !== pos.key) state.rk.sort = { key: "rank", desc: false };
+  state.rk.pos = pos.key;
+  document.title = `Classement des joueurs · ${pos.key} — NFL Gameday`;
+
+  if (body) {
+    // Changement de poste : titre, sélecteur et interrupteur restent en place,
+    // seul le tableau fait le fondu.
+    shell.querySelectorAll(".rk-strip a").forEach((a) => {
+      if (a.getAttribute("href") === `#/rankings/${pos.key}`) a.setAttribute("aria-current", "page");
+      else a.removeAttribute("aria-current");
+    });
+    shell.querySelector(".rk-sub").innerHTML = rkSub(pos, data);
+    paint(rkTable(pos, data.min_games), body);
+    return;
+  }
+  paint(`
+    <div class="rk-shell" data-stamp="${esc(metaStamp())}">
+      <div class="page-head"><h1 class="page-title">Joueurs</h1></div>
+      <p class="page-sub rk-sub">${rkSub(pos, data)}</p>
+      ${rkStrip(data, pos.key)}
+      <div class="rk-tools">${rkTools()}</div>
+      <div class="rk-body">${rkTable(pos, data.min_games)}</div>
+    </div>`);
+}
+
+// Tri, interrupteur et clic sur une ligne : le tableau est redessiné sur
+// place, sans animation (ni l'en-tête ni le sélecteur ne bougent).
+function redrawRankings() {
+  const body = view.querySelector(".rk-shell .rk-body");
+  const pos = state.rk.data?.positions.find((p) => p.key === state.rk.pos);
+  if (!body || !pos) return;
+  const scroll = body.querySelector(".table-scroll")?.scrollLeft || 0;
+  body.innerHTML = rkTable(pos, state.rk.data.min_games);
+  const ts = body.querySelector(".table-scroll");
+  if (ts) ts.scrollLeft = scroll;
+}
+
+view.addEventListener("click", (e) => {
+  const shell = e.target.closest(".rk-shell");
+  if (!shell) return;
+  const sort = e.target.closest(".rk-sort");
+  if (sort) {
+    const k = sort.dataset.sort;
+    const cur = state.rk.sort;
+    // Premier clic : croissant pour le rang, le nom et l'équipe ; décroissant sinon.
+    state.rk.sort = cur.key === k ? { key: k, desc: !cur.desc } : { key: k, desc: !["rank", "name", "team"].includes(k) };
+    redrawRankings();
+    view.querySelector(`.rk-sort[data-sort="${k}"]`)?.focus();
+    return;
+  }
+  const mode = e.target.closest("[data-mode]");
+  if (mode) {
+    state.rk.mode = mode.dataset.mode;
+    shell.querySelectorAll("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.rk.mode)));
+    redrawRankings();
+    return;
+  }
+  const row = e.target.closest("tr[data-href]");
+  if (row && !e.target.closest("a")) location.hash = row.dataset.href;
+});
+
 // --- Routage ----------------------------------------------------------
 async function route() {
   state.routeSeq += 1;
@@ -712,6 +1168,7 @@ async function route() {
   if (page === "week" && /^\d+$/.test(arg || "")) return renderWeek(Number(arg));
   if (page === "game" && arg) return renderGame(decodeURIComponent(arg));
   if (page === "standings") return renderStandings();
+  if (page === "rankings") return renderRankings(arg ? decodeURIComponent(arg).toUpperCase() : null);
   if (page === "player" && arg) return renderPlayer(decodeURIComponent(arg));
   return renderWeek(state.meta.current_week ?? 1);
 }
@@ -729,9 +1186,30 @@ document.addEventListener("keydown", (e) => {
   if (i >= 0 && j >= 0 && j < weeks.length) location.hash = `#/week/${weeks[j]}`;
 });
 
+// Pages semaine : #/week/8, ou #/ (semaine courante).
+const isWeekHash = (h) => /^#\/week\/\d+$/.test(h) || /^#?\/?$/.test(h);
+
+// Classements : #/rankings ou #/rankings/WR.
+const isRankingsHash = (h) => /^#\/rankings(\/[\w]+)?$/.test(h);
+
 window.addEventListener("hashchange", async () => {
-  await anim.leave(view); // fondu sortant bref, puis nouvelle page
-  window.scrollTo(0, 0);
+  const body = isWeekHash(location.hash) ? view.querySelector(".week-shell .week-body") : null;
+  const rkBody = isRankingsHash(location.hash) ? view.querySelector(".rk-shell .rk-body") : null;
+  if (rkBody) {
+    // Poste -> poste : seul le tableau s'anime.
+    await anim.leave(rkBody);
+    route();
+    return;
+  }
+  if (body) {
+    // Semaine -> semaine : seul le contenu sous le sélecteur s'anime. On ne
+    // remonte que si le sélecteur est sorti de l'écran (flèches du clavier).
+    await anim.leave(body);
+    if (view.querySelector(".week-strip").getBoundingClientRect().bottom < 0) window.scrollTo(0, 0);
+  } else {
+    await anim.leave(view); // fondu sortant bref, puis nouvelle page
+    window.scrollTo(0, 0);
+  }
   route();
 });
 

@@ -8,6 +8,8 @@
   --rule: #ddd5c6;
   --rule-strong: #1d1b17;
   --accent: #9c3d22;
+  --win: #2e6a3f;   /* résultats : vert et rouge sobres, contraste AA sur le papier */
+  --loss: #a8382b;
 
   --font-display: "Fraunces", Georgia, serif;
   --font-text: "Source Serif 4", Georgia, serif;
@@ -25,6 +27,8 @@
     --rule: #34302a;
     --rule-strong: #ece6d9;
     --accent: #e08a64;
+    --win: #8cc29a;
+    --loss: #e8897b;
   }
 }
 
@@ -34,7 +38,9 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+/* Place de la barre de défilement toujours réservée : une page plus courte
+   que l'écran (chargement, semaine vide) ne décale plus l'en-tête centré. */
+html { -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; }
 
 body {
   margin: 0;
@@ -110,6 +116,8 @@ main,
   .wordmark { font-size: 22px; gap: 6px; }
   .logo { width: 32px; height: 32px; margin-left: -5px; }
   .nav { gap: 14px; }
+  /* Trois liens : la navigation passe sous le logo plutôt que de déborder. */
+  .masthead-row { flex-wrap: wrap; row-gap: 4px; }
 }
 
 .nav { display: flex; gap: 20px; font-size: 15px; }
@@ -319,7 +327,10 @@ main:focus { outline: none; }
   .team-name .nick { display: inline; }
 }
 
-.byes { margin-top: 40px; font-size: 14px; color: var(--muted); }
+/* Équipes au repos : un peu plus présentes qu'une note de bas de page. */
+.byes { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--rule); font-size: 15px; color: var(--ink-2); }
+.byes-label { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.bye-team { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-display); font-weight: 500; }
 
 /* --- Page match : tableau de score ------------------------------------- */
 .game-head { margin-top: 24px; }
@@ -345,8 +356,27 @@ main:focus { outline: none; }
 }
 .scoreboard.is-scheduled { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
 
-.sb-team { display: flex; flex-direction: column; min-width: 0; }
-.sb-team.right { text-align: right; }
+.sb-team { display: flex; align-items: center; gap: 22px; min-width: 0; }
+.sb-team.right { flex-direction: row-reverse; text-align: right; }
+.sb-text { display: flex; flex-direction: column; min-width: 0; }
+
+/* Logos en couleur, taille fixe (pas de décalage au chargement de l'image). */
+.sb-logo-wrap { display: contents; }
+.sb-logo {
+  flex: 0 0 auto;
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
+}
+
+/* Gagnant : fin liseré à la couleur de l'équipe, sous l'abréviation. */
+.sb-team.is-winner .sb-abbr {
+  text-decoration: underline 2px var(--team, var(--accent));
+  text-underline-offset: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  .sb-team.is-winner .sb-abbr { text-decoration-color: var(--team-dark, var(--team, var(--accent))); }
+}
 
 .sb-abbr {
   font-family: var(--font-display);
@@ -372,6 +402,9 @@ main:focus { outline: none; }
 
 @media (max-width: 480px) {
   .scoreboard { column-gap: 8px; }
+  .sb-team { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .sb-team.right { flex-direction: column; align-items: flex-end; }
+  .sb-logo { width: 64px; height: 64px; }
   .sb-abbr { font-size: 26px; }
   .sb-score { font-size: 44px; }
   .sb-sep { font-size: 20px; }
@@ -419,22 +452,7 @@ td { text-align: right; }
 .team-stats td.is-better { color: var(--ink); font-weight: 600; }
 .team-stats .sub { font-size: 13px; color: var(--muted); font-weight: 400; }
 
-/* --- Joueurs clés ----------------------------------------------------- */
-.kp-grid { display: grid; grid-template-columns: 1fr; gap: 48px; margin-top: 8px; }
-@media (min-width: 800px) { .kp-grid { grid-template-columns: 1fr 1fr; } }
-
-.kp-team {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  padding-bottom: 8px;
-  font-family: var(--font-display);
-  font-weight: 500;
-  font-size: 22px;
-  border-bottom: 1px solid var(--rule-strong);
-}
-
+/* --- Joueurs clés -------------------------------------------------- */
 .kp-sub {
   margin: 28px 0 0;
   font-size: 12px;
@@ -443,7 +461,67 @@ td { text-align: right; }
   text-transform: uppercase;
   color: var(--muted);
 }
-.scheme { margin-left: 6px; font-weight: 400; letter-spacing: 0.04em; }
+.kp-empty { margin: 10px 0 0; font-size: 14px; font-style: italic; color: var(--muted); }
+
+/* Une rangée par catégorie, une colonne par équipe (voir keyPlayers dans
+   app.js). Mobile : une seule colonne, catégorie par catégorie. */
+.kp-grid { display: grid; grid-template-columns: 1fr; column-gap: 48px; margin-top: 8px; }
+.kp-cell { min-width: 0; }
+.kp-team { display: none; }
+.kp-row-title { margin: 36px 0 0; }
+.kp-cell-team {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding-bottom: 6px;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 18px;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+@media (min-width: 800px) {
+  .kp-grid { grid-template-columns: 1fr 1fr; }
+  .kp-row-title { grid-column: 1 / -1; }
+  .kp-cell-team { display: none; }
+  .kp-team {
+    display: block;
+    margin: 0;
+    padding: 20px 0 8px;
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 22px;
+    border-bottom: 1px solid var(--rule-strong);
+  }
+}
+.kp-team-inner { display: flex; align-items: center; gap: 10px; }
+
+/* --- MVP -------------------------------------------------------------- */
+/* Badge sobre (encre, pas de doré) et fin liseré à la couleur de l'équipe. */
+.mvp-badge {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 1px 6px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  line-height: 1.5;
+  color: var(--ink);
+  vertical-align: 1px;
+}
+.card.is-mvp { padding-left: 12px; border-left: 2px solid var(--team, var(--accent)); }
+
+@media (prefers-color-scheme: dark) {
+  .card.is-mvp { border-left-color: var(--team-dark, var(--team, var(--accent))); }
+}
+
+/* Stats des cartes : chaque cellule à la largeur de son libellé, sur une
+   ligne (« Yds course » ne doit pas passer sur deux lignes). */
+.key-players .stat-cells { display: flex; flex-wrap: wrap; gap: 4px 22px; }
+.key-players .stat-cells dt { white-space: nowrap; }
 
 .card { padding: 14px 0; border-bottom: 1px solid var(--rule); }
 
@@ -455,7 +533,7 @@ td { text-align: right; }
   text-transform: uppercase;
   color: var(--accent);
 }
-.card-pos { margin-left: 8px; font-weight: 400; color: var(--muted); }
+.card-pos { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; font-weight: 400; color: var(--muted); }
 
 .card-head { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
 .card-name { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.25; }
@@ -466,14 +544,13 @@ td { text-align: right; }
   width: 36px;
   height: 36px;
   border-radius: 50%;
+  /* Image déjà recadrée sur le visage par le CDN : centrage simple. */
   object-fit: cover;
-  object-position: top;
-  filter: grayscale(1) contrast(1.05);
+  object-position: center;
   background: var(--rule);
 }
-.headshot.is-empty { display: inline-block; }
-
-.card-note { margin: 8px 0 0; font-size: 13px; font-style: italic; color: var(--muted); }
+.headshot.is-empty { display: inline-block; overflow: hidden; color: var(--muted); }
+.headshot.is-empty svg { display: block; width: 100%; height: 100%; fill: currentColor; opacity: 0.45; }
 
 .stat-cells {
   display: grid;
@@ -484,18 +561,6 @@ td { text-align: right; }
 .stat-cells div { min-width: 0; }
 .stat-cells dt { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 .stat-cells dd { margin: 0; font-size: 17px; font-variant-numeric: tabular-nums lining-nums; }
-
-.big-plays { list-style: none; margin: 6px 0 0; padding: 0; }
-.big-plays li {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--rule);
-  font-size: 15px;
-}
-.bp-pos { font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: 0.04em; }
-.bp-what { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink-2); }
 
 .player-link {
   text-decoration: underline;
@@ -583,6 +648,70 @@ td { text-align: right; }
 .game-log .gl-opp, .game-log .gl-res { text-align: left; }
 .game-log .gl-res.is-V { color: var(--ink); }
 .game-log .grp-start { padding-left: 28px; }
+
+/* Fiches QB, offensif, défensif : logo adverse, résultat en couleur, blocs
+   « Passe » / « Réception » / « Course » séparés par un filet vertical. */
+.game-log-key .grp-start { padding-left: 18px; border-left: 1px solid var(--rule); }
+.game-log-key .grp-row th.grp-start { padding-left: 18px; }
+.game-log-key td:last-child, .game-log-key th:last-child { padding-right: 2px; }
+.game-log-key .gl-res.is-V { color: var(--win); }
+.game-log-key .gl-res.is-D { color: var(--loss); }
+.game-log-key .gl-res.is-N { color: var(--muted); }
+.gl-opp { white-space: nowrap; }
+/* Marge avant le filet d'un bloc : le dernier chiffre ne colle pas au trait. */
+.game-log-key :is(td, th):has(+ .grp-start), .rankings :is(td, th):has(+ .grp-start) { padding-right: 14px; }
+.gl-ha { display: inline-block; min-width: 1.7em; font-size: 13px; color: var(--muted); }
+.mini-logo-wrap { display: inline-flex; vertical-align: middle; }
+.mini-logo { display: block; width: 22px; height: 22px; object-fit: contain; }
+.abbr-fallback { font-size: 13px; color: var(--ink-2); }
+.totals-row { display: flex; flex-wrap: wrap; gap: 0 48px; }
+.totals-row .totals-group { flex: 0 1 auto; }
+.totals-row .stat-cells { display: flex; flex-wrap: wrap; gap: 6px 32px; }
+
+/* --- Classements par poste -------------------------------------------- */
+.rk-strip { margin-top: 24px; }
+.rk-strip a { min-width: 44px; }
+.rk-tools { display: flex; justify-content: flex-end; margin-top: 14px; font-size: 14px; color: var(--muted); }
+.rk-toggle { display: flex; gap: 8px; align-items: baseline; }
+.rk-toggle button { color: var(--muted); border-bottom: 1px solid transparent; transition: color 0.2s, border-color 0.2s; }
+.rk-toggle button:hover { color: var(--ink); }
+.rk-toggle button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.rk-toggle span { color: var(--rule); }
+
+.rankings { width: 100%; font-size: 15px; white-space: nowrap; }
+.rankings thead th { font-size: 12px; color: var(--muted); text-align: right; padding-bottom: 6px; }
+.rankings thead tr:last-child th { border-bottom: 1px solid var(--rule-strong); }
+.rankings .grp-row th { text-align: left; padding-bottom: 2px; letter-spacing: 0.06em; text-transform: uppercase; }
+.rankings .grp-start { padding-left: 18px; border-left: 1px solid var(--rule); }
+.rankings tbody tr { border-bottom: 1px solid var(--rule); cursor: pointer; transition: background-color 0.2s; }
+.rankings tbody tr:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.rankings td { color: var(--ink-2); padding-top: 5px; padding-bottom: 5px; }
+.rankings td, .rankings th { padding-left: 12px; }
+.rankings tr > :first-child { padding-left: 4px; }
+.rankings tr > :last-child { padding-right: 4px; }
+.rankings .rk-name, .rankings .rk-team, .rankings .rk-photo { text-align: left; }
+.rankings thead .rk-name, .rankings thead .rk-team { text-align: left; }
+.rankings .rk-rank { color: var(--muted); width: 2.2em; }
+.rankings .rk-photo { width: 36px; padding-right: 0; }
+.rankings .rk-photo .headshot { display: block; }
+.rankings tbody .rk-name { font-weight: 400; color: var(--ink); }
+.rankings .rk-score { color: var(--ink); font-weight: 600; }
+.rankings tr.is-low td, .rankings tr.is-low th { color: var(--muted); font-weight: 400; }
+.rankings tr.is-low .headshot, .rankings tr.is-low .mini-logo { opacity: 0.45; }
+.rk-sort {
+  padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; color: inherit; text-align: inherit; white-space: nowrap;
+}
+.rk-sort:hover { color: var(--ink); }
+.rankings [aria-sort] .rk-sort { color: var(--ink); }
+.rankings [aria-sort="ascending"] .rk-sort::after { content: " ↑"; }
+.rankings [aria-sort="descending"] .rk-sort::after { content: " ↓"; }
+
+@media (max-width: 640px) {
+  .rankings { font-size: 14px; }
+  .rankings td, .rankings th { padding-left: 9px; }
+  .rankings .grp-start { padding-left: 12px; }
+}
 
 /* --- États ------------------------------------------------------------ */
 .state-msg { color: var(--muted); font-style: italic; }

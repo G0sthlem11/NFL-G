@@ -1,138 +1,251 @@
-"""Tests de la logique « joueurs clés » sur de petits jeux de données (tests/fixtures)."""
-import json
-from datetime import datetime
-from pathlib import Path
+"""Joueurs clés d'un match, équipe par équipe : QB, top offensif, top défensif, kicker."""
+import logging
 
 import polars as pl
 import pytest
 
-from app.data.key_players import latest_snapshot, select_key_players
+from app.data.key_players import DEFAULTS, canonical_team, load_config, select_match_key_players
 
-FIXTURES = Path(__file__).parent / "fixtures"
-
-
-def load(name: str):
-    raw = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
-
-    def df(rows):
-        return pl.DataFrame(rows, infer_schema_length=None) if rows else pl.DataFrame()
-
-    kickoff = datetime.fromisoformat(raw["kickoff_utc"]) if raw["kickoff_utc"] else None
-    kp = select_key_players(
-        team=raw["team"], gameday=raw["gameday"], kickoff=kickoff,
-        stats=df(raw["player_stats"]), depth=df(raw["depth_charts"]), roster=df(raw["rosters"]),
-    )
-    return raw, kp
+AWAY, HOME = "AAA", "BBB"
+GAME = "2026_01_AAA_BBB"
 
 
-def by_role(kp):
-    return {k.role: k for k in kp.offense + kp.edges}
+def row(pid, team, position, **stats):
+    return {"player_id": pid, "player_display_name": pid, "position": position, "team": team,
+            "game_id": GAME, **stats}
 
 
-# --- 4-3, titulaires absents ---------------------------------------------
-@pytest.fixture(scope="module")
-def aaa():
-    return load("team_43_injuries.json")[1]
+def frame(rows):
+    return pl.DataFrame(rows, infer_schema_length=None)
 
 
-def test_uses_latest_snapshot_before_kickoff(aaa):
-    # Le snapshot du 04/10 à 23:00Z (après le match) fait de A_QB2 le titulaire : ignoré.
-    assert aaa.depth_chart_dt == "2026-10-03T07:00:00Z"
-    assert by_role(aaa)["QB"].player.player_id == "A_QB1"
+def select(rows, pressures=None, config=None, away=AWAY, home=HOME):
+    return select_match_key_players(frame(rows), away, home, pressures, config or DEFAULTS, game_id=GAME)
 
 
-def test_old_snapshot_is_not_used(aaa):
-    assert by_role(aaa)["WR1"].player.player_id == "A_WR1"  # pas A_WR_OLD (snapshot du 28/09)
+def ids(items):
+    return [getattr(x, "player", x).player_id for x in items]
 
 
-def test_starters_who_played_come_from_depth_chart(aaa):
-    r = by_role(aaa)
-    assert r["RB1"].player.player_id == "A_RB1" and r["RB1"].source == "depth_chart"
-    assert r["TE1"].player.player_id == "A_TE1"
-    assert r["EDGE1"].player.player_id == "A_DE1" and r["EDGE1"].depth_pos == "LDE"
-    assert aaa.scheme == "4-3" and r["EDGE1"].label == "DE"
+def test_each_team_gets_its_own_players():
+    k = select([
+        row("QB_A", AWAY, "QB", attempts=25), row("QB_B", HOME, "QB", attempts=30),
+        row("WR_A", AWAY, "WR", receiving_yards=40), row("WR_B", HOME, "WR", receiving_yards=150),
+        row("LB_A", AWAY, "LB", def_tackles_solo=3), row("LB_B", HOME, "LB", def_tackles_solo=9),
+        row("K_A", AWAY, "K", fg_att=1, fg_made=1), row("K_B", HOME, "K", pat_att=2, pat_made=2),
+    ])
+    assert (k.away.team, k.home.team) == (AWAY, HOME)
+    assert (ids(k.away.quarterbacks), ids(k.home.quarterbacks)) == (["QB_A"], ["QB_B"])
+    assert (ids(k.away.offense), ids(k.home.offense)) == (["WR_A"], ["WR_B"])
+    assert (ids(k.away.defense), ids(k.home.defense)) == (["LB_A"], ["LB_B"])
+    assert (ids(k.away.kickers), ids(k.home.kickers)) == (["K_A"], ["K_B"])
+    # Le classement est propre à chaque équipe : chacune a son n° 1.
+    assert k.away.offense[0].rank == k.home.offense[0].rank == 1
 
 
-def test_inactive_wr2_replaced_by_most_productive_wr(aaa):
-    wr2 = by_role(aaa)["WR2"]
-    assert wr2.source == "replacement"
-    assert wr2.player.player_id == "A_WR3"  # 95 yds, devant A_WR4 (20 yds)
-    assert wr2.replaced_starter == "Wide Two" and wr2.replaced_reason == "inactif"
+def test_quarterbacks_need_a_pass_attempt():
+    k = select([
+        row("QB1", AWAY, "QB", attempts=25), row("QB2", AWAY, "QB", attempts=2),
+        row("KNEEL", AWAY, "QB", attempts=0, carries=1),   # aucune passe : exclu
+        row("TRICK", AWAY, "RB", attempts=1, carries=10),  # passe d'un RB : pas un QB
+    ])
+    assert ids(k.away.quarterbacks) == ["QB1", "QB2"]
 
 
-def test_reserve_rde_replaced_by_other_de(aaa):
-    edge2 = by_role(aaa)["EDGE2"]
-    assert edge2.player.player_id == "A_DE3"
-    assert edge2.replaced_starter == "Right End" and edge2.replaced_reason == "en réserve"
+def test_offense_score_and_qb_excluded():
+    k = select([
+        row("QB", AWAY, "QB", attempts=30, carries=8, rushing_yards=90, rushing_tds=2),
+        row("RB", AWAY, "RB", carries=20, rushing_yards=100, rushing_tds=1, receptions=2, receiving_yards=10),
+        row("WR", AWAY, "WR", targets=10, receptions=8, receiving_yards=150),
+        row("TE", AWAY, "TE", targets=5, receptions=4, receiving_yards=40, receiving_tds=2),
+    ])
+    assert [(r.player.player_id, r.score) for r in k.away.offense] == [("WR", 150.0), ("RB", 130.0), ("TE", 80.0)]
 
 
-def test_no_player_holds_two_roles(aaa):
-    ids = [k.player.player_id for k in aaa.offense + aaa.edges if k.player]
-    assert len(ids) == len(set(ids))
+def test_offense_ties_break_on_tds_then_yards_then_receptions_then_name():
+    k = select([
+        row("B_YARDS", AWAY, "WR", receiving_yards=60, receptions=3),
+        row("A_TD", AWAY, "WR", receiving_yards=40, receiving_tds=1, receptions=2),
+        row("D_REC", AWAY, "WR", receiving_yards=60, receptions=5),
+        row("C_SAME", AWAY, "WR", receiving_yards=60, receptions=3),
+    ])
+    assert ids(k.away.offense) == ["A_TD", "D_REC", "B_YARDS", "C_SAME"]
 
 
-def test_tackle_leader_counts_solo_plus_assists(aaa):
-    # A_LB1 : 7 + 5 = 12 ; A_LB2 : 9 + 1 = 10
-    assert aaa.tackle_leader.player_id == "A_LB1" and aaa.tackle_leader.tackles == 12
+def test_top_n_per_team_and_fewer_players_shown_as_is():
+    rows = [row(f"WR{i}", AWAY, "WR", receiving_yards=10 * i) for i in range(1, 9)]
+    rows += [row("ONLY_WR", HOME, "WR", receiving_yards=5), row("ONLY_LB", HOME, "LB", def_tackles_solo=1)]
+    k = select(rows)
+    assert ids(k.away.offense) == ["WR8", "WR7", "WR6", "WR5", "WR4"]
+    assert ids(k.home.offense) == ["ONLY_WR"] and ids(k.home.defense) == ["ONLY_LB"]
+    assert k.away.defense == [] and k.home.quarterbacks == [] and k.home.kickers == []
 
 
-def test_playmakers_sack_int_ff(aaa):
-    assert [p.player_id for p in aaa.playmakers] == ["A_CB1", "A_S1", "A_DE3"]
-    assert aaa.playmakers[2].sacks == 1.5
+def test_defense_score_with_pressures():
+    rows = [
+        row("LB", HOME, "LB", def_tackles_solo=8, def_tackle_assists=4),                          # 12
+        row("CB", HOME, "CB", def_interceptions=1, def_pass_defended=2, def_tackles_solo=2),      # 14
+        row("DE", HOME, "DE", def_sacks=1.5, def_qb_hits=2, def_tackles_solo=2),                  # 12 + 6
+    ]
+    press = pl.DataFrame({"player_id": ["DE", "LB"], "pressures": [4.0, 0.0]})
+    k = select(rows, press)
+    assert k.pressures_available is True
+    assert [(r.player.player_id, r.score) for r in k.home.defense] == [("DE", 18.0), ("CB", 14.0), ("LB", 12.0)]
 
 
-# --- 3-4 : edges = SLB/WLB -----------------------------------------------
-@pytest.fixture(scope="module")
-def bbb():
-    return load("team_34_edges.json")[1]
+def test_defense_without_pressures_does_not_fail():
+    rows = [row("LB", HOME, "LB", def_tackles_solo=8, def_tackle_assists=4),
+            row("DE", HOME, "DE", def_sacks=1.5, def_qb_hits=2, def_tackles_solo=2)]
+    for missing in (None, pl.DataFrame(schema={"player_id": pl.Utf8, "pressures": pl.Float64})):
+        k = select(rows, missing)
+        assert k.pressures_available is False
+        # Égalité à 12 : départage sur INT + sacks (DE), pas sur les plaquages (LB).
+        assert [(r.player.player_id, r.score) for r in k.home.defense] == [("DE", 12.0), ("LB", 12.0)]
 
 
-def test_34_edges_are_outside_linebackers(bbb):
-    r = by_role(bbb)
-    assert bbb.scheme == "3-4"
-    assert (r["EDGE1"].player.player_id, r["EDGE1"].depth_pos, r["EDGE1"].label) == ("B_OLB1", "SLB", "OLB")
-    assert (r["EDGE2"].player.player_id, r["EDGE2"].depth_pos) == ("B_OLB2", "WLB")
+def test_kicker_stats():
+    k = select([row("K", HOME, "K", fg_made=2, fg_att=3, fg_long=51, pat_made=3, pat_att=3),
+                row("P", HOME, "P")])  # punter sans coup de pied tenté : exclu
+    kh = k.home.kickers
+    assert ids(kh) == ["K"] and (kh[0].fg_made, kh[0].fg_att, kh[0].fg_long, kh[0].pat_made) == (2, 3, 51, 3)
 
 
-def test_active_starter_without_stats_is_replaced(bbb):
-    te = by_role(bbb)["TE1"]
-    assert te.player.player_id == "B_TE2"
-    assert te.replaced_starter == "Bravo TE1" and te.replaced_reason == "actif sans stat"
+def test_traded_player_counted_for_his_team_in_this_game():
+    # Même joueur (TRADED), deux matchs : la colonne team de la ligne de stats fait foi.
+    before = select([row("TRADED", AWAY, "WR", receiving_yards=90)])
+    after = select([row("TRADED", HOME, "WR", receiving_yards=70)])
+    assert ids(before.away.offense) == ["TRADED"] and before.home.offense == []
+    assert ids(after.home.offense) == ["TRADED"] and after.away.offense == []
 
 
-def test_34_playmakers_include_interior_sack(bbb):
-    assert [p.player_id for p in bbb.playmakers] == ["B_OLB2", "B_OLB1", "B_DL1"]
+def test_team_aliases_match_schedule_abbreviations():
+    assert [canonical_team(t) for t in ("LAR", "JAC", "WSH", "OAK", "SD", "STL", "la", "KC")] == \
+        ["LA", "JAX", "WAS", "LV", "LAC", "LA", "LA", "KC"]
+    k = select([row("WR_LAR", "LAR", "WR", receiving_yards=80), row("WR_JAC", "JAC", "WR", receiving_yards=60)],
+               away="LA", home="JAX")
+    assert ids(k.away.offense) == ["WR_LAR"] and k.away.offense[0].player.team == "LA"
+    assert ids(k.home.offense) == ["WR_JAC"] and k.home.offense[0].player.team == "JAX"
 
 
-# --- Pas de depth chart : repli ------------------------------------------
-@pytest.fixture(scope="module")
-def ccc():
-    return load("team_no_depth_chart.json")[1]
+def test_player_from_another_team_is_logged_and_dropped(caplog):
+    with caplog.at_level(logging.ERROR, logger="app.data.key_players"):
+        k = select([row("WR", AWAY, "WR", receiving_yards=50), row("INTRUS", "ZZZ", "WR", receiving_yards=500)])
+    assert ids(k.away.offense) == ["WR"] and k.home.offense == []
+    assert any("INTRUS" in r.getMessage() and "ZZZ" in r.getMessage() for r in caplog.records)
 
 
-def test_fallback_without_depth_chart(ccc):
-    r = by_role(ccc)
-    assert ccc.depth_chart_dt is None and ccc.scheme is None
-    assert all(k.source == "fallback" for k in ccc.offense + ccc.edges)
-    assert r["QB"].player.player_id == "C_QB"
-    assert r["RB1"].player.player_id == "C_RB2"
-    assert (r["WR1"].player.player_id, r["WR2"].player.player_id) == ("C_WR2", "C_WR3")
-    assert r["TE1"].player.player_id == "C_TE"
-    assert (r["EDGE1"].player.player_id, r["EDGE2"].player.player_id) == ("C_OLB", "C_DE1")
+def test_rows_without_player_are_ignored():
+    rows = [row("WR", AWAY, "WR", receiving_yards=50), {**row("X", AWAY, "WR", receiving_yards=900), "player_id": None}]
+    assert ids(select(rows).away.offense) == ["WR"]
 
 
-def test_rows_without_player_id_are_ignored(ccc):
-    # La fixture contient une ligne sans player_id avec 9 plaquages et un FF.
-    assert ccc.tackle_leader.player_id == "C_LB"
-    assert all(p.player_id for p in ccc.playmakers)
+def test_empty_match():
+    k = select_match_key_players(pl.DataFrame(), AWAY, HOME)
+    for side in (k.away, k.home):
+        assert (side.quarterbacks, side.offense, side.defense, side.kickers) == ([], [], [], [])
 
 
-def test_missing_role_is_none_not_error():
-    kp = select_key_players("ZZZ", "2026-10-04", None, pl.DataFrame(), pl.DataFrame(), pl.DataFrame())
-    assert all(k.source == "none" and k.player is None for k in kp.offense + kp.edges)
-    assert kp.tackle_leader is None and kp.playmakers == []
+def test_config_file_overrides_defaults(tmp_path):
+    path = tmp_path / "kp.toml"
+    path.write_text("[offense]\ntop = 2\ntouchdowns = 6\n", encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg["offense"]["top"] == 2 and cfg["offense"]["touchdowns"] == 6
+    assert cfg["offense"]["rushing_yards"] == 1.0 and cfg["defense"] == DEFAULTS["defense"]
 
 
-def test_latest_snapshot_same_day_without_kickoff():
-    depth = pl.DataFrame({"dt": ["2026-10-04T07:00:00Z", "2026-10-05T07:00:00Z"], "x": [1, 2]})
-    assert latest_snapshot(depth, "2026-10-04", None)["x"].to_list() == [1]
+@pytest.mark.parametrize("section", ["offense", "defense", "mvp"])
+def test_shipped_config_matches_spec(section):
+    assert load_config()[section] == DEFAULTS[section]
+
+
+# --- MVP ----------------------------------------------------------------
+from app.data.key_players import MvpScale  # noqa: E402
+
+# Références fictives : 10 valeurs par catégorie (meilleur score par équipe-match).
+SCALE = MvpScale({
+    "qb": [60, 80, 90, 100, 110, 120, 130, 150, 170, 200],
+    "offense": [50, 70, 90, 100, 110, 120, 130, 150, 180, 220],
+    "defense": [10, 12, 14, 16, 18, 20, 22, 25, 30, 35],
+    "kicker": [3, 5, 6, 7, 8, 9, 10, 12, 15, 20],
+})
+
+
+def mvp_of(rows, away_score, home_score, scale=SCALE, config=None):
+    return select_match_key_players(frame(rows), AWAY, HOME, None, config or DEFAULTS, game_id=GAME,
+                                    away_score=away_score, home_score=home_score, mvp_scale=scale).mvp
+
+
+def test_mvp_raw_scores_per_category():
+    from app.data.key_players import kicker_mvp_score, qb_mvp_score
+    from app.data.models import PlayerLine
+    w = DEFAULTS["mvp"]
+    qb = PlayerLine(player_id="Q", name="Q", team=AWAY, passing_yards=300, passing_tds=3, interceptions=1,
+                    rushing_yards=20, rushing_tds=1)
+    assert qb_mvp_score(qb, w) == pytest.approx(0.4 * 300 + 15 * 3 - 20 + 20 + 20)  # 185
+    k = PlayerLine(player_id="K", name="K", team=AWAY, fg_made=3, fg_made_50=1, pat_made=2)
+    assert kicker_mvp_score(k, w) == 3 * 3 + 2 + 1
+
+
+def test_percentile_is_mid_rank():
+    assert SCALE.percentile("defense", 22) == 65.0   # 6 valeurs dessous, 1 égale -> (6 + 7) / 2 / 10
+    assert SCALE.percentile("defense", 99) == 100.0 and SCALE.percentile("defense", 1) == 0.0
+    assert MvpScale({}).percentile("qb", 150) is None
+
+
+def test_mvp_compares_percentiles_not_raw_scores():
+    rows = [row("QB", HOME, "QB", attempts=30, passing_yards=220, passing_tds=1),   # brut 103 -> p35
+            row("WR", HOME, "WR", receiving_yards=125),                             # brut 125 -> p60
+            row("EDGE", HOME, "DE", def_sacks=3, def_qb_hits=3, def_tackles_solo=5)]  # brut 23 -> p70
+    m = mvp_of(rows, 10, 24)
+    assert (m.player.player_id, m.category, m.score, m.percentile) == ("EDGE", "defense", 23.0, 70.0)
+
+
+def test_qb_can_be_mvp():
+    rows = [row("QB", HOME, "QB", attempts=35, passing_yards=350, passing_tds=3),   # brut 185 -> p90
+            row("WR", HOME, "WR", receiving_yards=140)]                             # p70
+    m = mvp_of(rows, 10, 24)
+    assert (m.player.player_id, m.category, m.percentile) == ("QB", "qb", 90.0)
+
+
+def test_kicker_malus():
+    rows = [row("K", HOME, "K", fg_made=5, fg_att=5, pat_made=0, pat_att=0),       # brut 15 -> p85
+            row("WR", HOME, "WR", receiving_yards=140)]                             # p70
+    m = mvp_of(rows, 10, 15)
+    assert m.category == "offense"                                                  # 85 × 0,66 = 56,1 < 70
+    no_malus = {**DEFAULTS, "mvp": {**DEFAULTS["mvp"], "kicker_factor": 1.0}}
+    m = mvp_of(rows, 10, 15, config=no_malus)
+    assert (m.player.player_id, m.normalized) == ("K", 85.0)
+
+
+def test_mvp_comes_from_winning_team_only():
+    rows = [row("QB_LOSER", AWAY, "QB", attempts=40, passing_yards=450, passing_tds=4),  # p100, mais perdant
+            row("RB_WIN", HOME, "RB", carries=20, rushing_yards=110, rushing_tds=1)]    # brut 130
+    m = mvp_of(rows, 20, 27)
+    assert (m.player.player_id, m.category, m.score) == ("RB_WIN", "offense", 130.0)
+
+
+def test_mvp_on_tie_considers_both_teams():
+    rows = [row("WR_A", AWAY, "WR", receiving_yards=120), row("WR_B", HOME, "WR", receiving_yards=90)]
+    assert mvp_of(rows, 20, 20).player.player_id == "WR_A"
+
+
+def test_no_mvp_without_score_players_or_scale():
+    assert mvp_of([row("WR", AWAY, "WR", receiving_yards=120)], None, None) is None
+    assert mvp_of([row("WR", AWAY, "WR", receiving_yards=120)], 7, 3, scale=None) is None
+    assert mvp_of([], 7, 3) is None
+
+
+def test_scale_uses_best_score_per_team_and_game_among_involved_players():
+    stats = frame([
+        row("QB1", AWAY, "QB", attempts=30, passing_yards=250),                       # 100
+        row("QB_FEW", AWAY, "QB", attempts=5, passing_yards=80),                      # < 10 passes : exclu
+        row("WR1", AWAY, "WR", receptions=5, receiving_yards=90),
+        row("WR2", AWAY, "WR", receptions=2, receiving_yards=40),                     # pas le meilleur : exclu
+        row("LB1", HOME, "LB", def_tackles_solo=6),
+        row("K1", HOME, "K", fg_att=2, fg_made=2, pat_att=1, pat_made=1),             # 7
+        {**row("WR3", HOME, "WR", receptions=3, receiving_yards=30), "game_id": "2026_02_BBB_AAA"},
+    ])
+    pfr = pl.DataFrame({"game_id": [GAME], "team": [HOME], "player_id": ["LB1"], "pressures": [2.0]})
+    scale = MvpScale.from_stats([(stats, pfr)], DEFAULTS)
+    assert scale.sorted == {"qb": [100.0], "offense": [30.0, 90.0], "defense": [9.0], "kicker": [7.0]}
+    assert scale.games == 2

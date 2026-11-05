@@ -6,8 +6,9 @@
 // chaque fonction se contente de ne rien faire et le contenu s'affiche tel quel.
 //
 // API exposée à app.js (window.GamedayAnim) :
-//   leave(view)   avant un changement de page : fondu sortant de la vue
-//   enter(view)   après le rendu final d'une page : fondu entrant, cascade
+//   leave(el)     avant un changement de page : fondu sortant de la zone
+//   show(el)      chargement long : réaffiche la zone et son message
+//   enter(el)     après le rendu final d'une page : fondu entrant, cascade
 //                 des cartes, compteurs sur les scores et les stats, survol
 "use strict";
 
@@ -130,9 +131,12 @@
       // ses vraies valeurs (recherche dans la page, impression).
       const count = prepareCount(el);
       const delay = nextDelay();
-      M.animate(el, { opacity: [0, 1], transform: ["translateY(8px)", "translateY(0px)"] },
+      M.animate(el, { opacity: [0, 1], transform: ["translateY(8px)", "none"] },
         { duration: T.card, delay, ease: EASE })
-        .then(() => { el.style.transform = ""; });
+        // Motion réécrit la valeur finale en style inline après sa promesse :
+        // on la retire à l'image suivante, pour ne pas laisser la carte (et ses
+        // portraits) sur un calque composité avec une transformation résiduelle.
+        .then(() => requestAnimationFrame(() => el.style.removeProperty("transform")));
       count?.(delay + 0.05);
       stop?.();
     }, { amount: 0.15 });
@@ -159,22 +163,23 @@
   }
 
   // --- Transitions entre les vues ---------------------------------------
-  let fallback = 0;
 
+  // Fondu sortant de la zone qui va changer (la vue, ou seulement la liste
+  // des matchs). Elle garde sa place dans la page : pas de saut de hauteur.
   async function leave(view) {
     reset();
-    clearTimeout(fallback);
     if (reduced() || !view.childElementCount) return;
     // Les contrôles Motion ont un then() mais pas de catch() : await suffit.
     try { await M.animate(view, { opacity: 0 }, { duration: T.out, ease: EASE }); } catch { /* annulé */ }
-    // Chargement plus long que prévu : on réaffiche la vue (et son
-    // « Chargement… ») au lieu de laisser une page vide.
-    clearTimeout(fallback);
-    fallback = setTimeout(() => M.animate(view, { opacity: 1 }, { duration: T.in, ease: EASE }), 300);
+  }
+
+  // Chargement long : la zone réapparaît avec son message « Chargement… ».
+  function show(view) {
+    if (reduced()) { view.style.opacity = ""; return; }
+    M.animate(view, { opacity: 1 }, { duration: T.in, ease: EASE });
   }
 
   function enter(view) {
-    clearTimeout(fallback);
     if (reduced()) { view.style.opacity = ""; return; }
     reset();
     measure(view);
@@ -189,5 +194,5 @@
     hoverGames(view);
   }
 
-  window.GamedayAnim = { leave, enter };
+  window.GamedayAnim = { leave, enter, show };
 })();

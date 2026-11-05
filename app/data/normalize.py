@@ -183,4 +183,10 @@ def to_player_line(row: dict) -> PlayerLine:
         def_interceptions=as_int(row.get("def_interceptions")),
         passes_defended=as_int(row.get("def_pass_defended")),
         fumbles_forced=as_int(row.get("def_fumbles_forced")),
+        fg_made=as_int(row.get("fg_made")),
+        fg_att=as_int(row.get("fg_att")),
+        fg_long=as_int(row.get("fg_long")),
+        fg_made_50=_sum(as_int(row.get("fg_made_50_59")), as_int(row.get("fg_made_60_"))),
+        pat_made=as_int(row.get("pat_made")),
+        pat_att=as_int(row.get("pat_att")),
     )

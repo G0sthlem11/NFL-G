@@ -1,9 +1,10 @@
 # NFL Gameday
 
-Web app personnelle qui affiche les résultats des matchs NFL de la saison en cours. Pour chaque match, on trouve les statistiques des deux équipes et une fiche des joueurs clés :
+Web app personnelle qui affiche les résultats des matchs NFL de la saison en cours. Pour chaque match, on trouve les statistiques des deux équipes et les joueurs clés de chaque équipe :
 
-- en attaque : QB, RB1, WR1, WR2, TE1 ;
-- en défense : les edges titulaires, le meilleur plaqueur, et les auteurs de sacks, d'interceptions et de fumbles forcés.
+- ses quarterbacks ;
+- son top 5 offensif (yards et TD) et son top 3 défensif (interceptions, sacks, passes défendues, QB hits, pressions, plaquages) ;
+- son kicker.
 
 L'app propose aussi un classement par division et une page par joueur.
 
@@ -59,8 +60,9 @@ La documentation interactive de l'API se trouve à l'adresse <http://127.0.0.1:8
 |---|---|---|
 | Semaine | `#/week/8` | Les matchs de la semaine, groupés par jour (heure de Paris), avec le score final ou l'heure du coup d'envoi. Sélecteur Week 1 à 18, puis playoffs. Les flèches ← et → du clavier changent de semaine. |
 | Match | `#/game/2026_08_CAR_GB` | Score final et par quart-temps, stade, météo si elle est connue, statistiques d'équipe comparées, cartes des joueurs clés. |
-| Classement | `#/standings` | AFC et NFC, une table par division. |
-| Joueur | `#/player/00-0036264` | Totaux de la saison et ligne match par match. |
+| Équipes | `#/standings` | Classement AFC et NFC, une table par division. |
+| Joueurs | `#/rankings/WR` | Le titulaire de chaque équipe à chaque poste (QB, RB, WR, TE, EDGE, DT, LB, CB, S, K), classé de 1 à 32. Tri par colonne, total de la saison ou moyenne par match. |
+| Joueur | `#/player/00-0036264` | Totaux de la saison et ligne match par match, limités aux stats clés du poste (QB, offensif, défensif ; fiche complète pour les autres postes). |
 
 ## Actualisation des données
 
@@ -120,7 +122,9 @@ py -m pytest
 
 | Fichier | Ce qui est testé |
 |---|---|
-| `tests/test_key_players.py` | Logique des joueurs clés, sur les jeux d'exemple de `tests/fixtures/` (4-3, 3-4, absence de depth chart). |
+| `tests/test_key_players.py` | Joueurs clés par équipe : quarterbacks, scores et départages, pressions absentes, kickers, joueur échangé, abréviations d'équipe, fichier de pondérations. |
+| `tests/test_rankings.py` | Classements par poste : sources de position, titulaire aux snaps, joueur échangé, moyenne par match et minimum de matchs, kicker. |
+| `tests/test_team_assets.py` | Couleurs des points d'équipe (contraste) et chemins des logos. |
 | `tests/test_standings.py` | Calcul du classement. |
 | `tests/test_data_layer.py` | Cache et normalisation. |
 | `tests/test_api.py` | API de bout en bout, sur une mini-saison fictive sans accès réseau. |
@@ -262,16 +266,48 @@ C'est `middleware.js`, un Routing Middleware Vercel, qui protège le site en lig
 
 ## Comment sont choisis les joueurs clés
 
-Le détail est documenté en tête de [`app/data/key_players.py`](app/data/key_players.py). En résumé :
+Le détail est documenté en tête de [`app/data/key_players.py`](app/data/key_players.py). Tout est calculé sur les stats du match (`load_player_stats`, niveau hebdomadaire), **séparément pour chaque équipe**. La page affiche une colonne par équipe, dans l'ordre du tableau de score : l'équipe à l'extérieur à gauche, l'équipe à domicile à droite (l'une sous l'autre sur mobile). Pour chaque équipe :
 
-1. **Depth chart** : on prend le snapshot le plus récent pris **avant le coup d'envoi** du match.
-2. **Attaque** : QB, RB1 et TE1 sont les joueurs de rang 1 à leur poste. WR1 et WR2 sont les deux premiers receveurs du classement des WR.
-3. **Edges** : le choix dépend du schéma défensif de l'équipe.
-   - En **4-3**, ce sont les DE gauche et droit (LDE et RDE).
-   - En **3-4**, LDE et RDE jouent en fait à l'intérieur de la ligne. Les vrais pass rushers sont les linebackers extérieurs, SLB et WLB, affichés « OLB ».
-4. **Titulaire qui n'a pas joué** : s'il n'a aucune stat dans le match, il est remplacé par le joueur du même poste le plus productif. Une mention discrète l'indique, par exemple « Remplace X (inactif) ». Le motif (inactif, en réserve, actif sans stat) vient du roster hebdomadaire.
-5. **Sans depth chart** : le choix se fait sur la production du match. Par exemple, WR1 et WR2 sont les deux WR avec le plus de yards en réception.
-6. **Défense** : on ajoute le meilleur plaqueur (plaquages solo et assistés), puis tous les joueurs ayant réussi un sack, une interception ou un fumble forcé.
+1. **Quarterbacks** : tous les QB qui ont tenté au moins une passe.
+2. **Top 5 offensif**, QB exclus : `yards course + yards réception + 20 × TD (course + réception)`.
+3. **Top 3 défensif** : `6 × INT + 4 × sacks + 3 × passes défendues + 2 × QB hits + 1,5 × pressions + 1 × plaquages (solo + assistés)`.
+   - Les pressions viennent des stats avancées PFR (`load_pfr_advstats`, type `def`), reliées aux joueurs nflverse par `load_players` (`pfr_id` → `gsis_id`), puis jointes par joueur et par match.
+   - Si PFR ne couvre pas un match, le score est calculé sans les pressions, et la page le signale.
+4. **Kicker**, avec ses field goals réussis sur tentés, son plus long FG et ses extra points.
+
+Une équipe qui a moins de 5 joueurs offensifs ou de 3 défensifs avec des stats n'affiche que ceux qui existent.
+
+**Équipe d'un joueur** : c'est celle de sa ligne de stats pour ce match (colonne `team`), pas son équipe actuelle. Un joueur échangé en cours de saison apparaît avec l'équipe pour laquelle il a joué ce jour-là : en 2026, Marvin Harrison Jr. figure avec ARI en Week 4, puis avec HOU en Week 7. Les abréviations sont ramenées à celles du calendrier (LAR → LA, JAC → JAX, WSH → WAS, OAK → LV…). Un joueur qui n'appartient à aucune des deux équipes du match est écarté et signalé par une erreur dans les logs.
+
+Les égalités se départagent toujours dans le même ordre :
+- **attaque** : le plus de TD, puis de yards, puis de réceptions ;
+- **défense** : le plus d'interceptions et de sacks, puis de plaquages ;
+- **en dernier recours** : le nom, puis l'identifiant du joueur.
+
+**MVP du match** : un seul joueur, choisi parmi les joueurs clés de l'équipe gagnante (des deux équipes en cas de match nul). Chaque catégorie a son score brut :
+- **QB** : `0,4 × yards passe + 15 × TD passe − 20 × INT + yards course + 20 × TD course` ;
+- **offensif** et **défensif** : les scores des tops ;
+- **kicker** : `3 × FG réussi + 1 × extra point + 1 par FG réussi de 50 yards ou plus`.
+
+Ces scores n'ont pas la même échelle : un grand match défensif fait environ 35 points, un grand match offensif environ 200. Chaque score est donc converti en **percentile dans sa catégorie**. La référence est la distribution, sur la saison, du meilleur score de chaque équipe dans chaque match, parmi les joueurs réellement impliqués (QB avec au moins 10 passes, au moins une touche de balle, au moins une stat défensive, au moins une tentative au pied).
+
+Comparer au meilleur de chaque équipe, plutôt qu'à toutes les lignes, évite un biais : une équipe a une vingtaine de défenseurs avec une stat mais un seul QB. Contre toutes les lignes, la défense remportait 77 MVP sur 121 en 2026, et les QB 5.
+
+Le MVP est le percentile le plus élevé. Celui du kicker est multiplié par 0,66, pour qu'il ne gagne que sur un match décisif. En début de saison (moins de 48 matchs joués), la saison précédente complète les distributions. Les scores bruts des tops ne changent pas : le percentile ne sert qu'à désigner le MVP.
+
+Dans les joueurs clés, la carte du MVP porte un badge « MVP » et un fin liseré à la couleur de son équipe. Pour vérifier les choix sur la saison, ou sur des matchs précis : `py -m scripts.calibrate_mvp [game_id ...]`.
+
+Les pondérations, la taille des classements et le barème du MVP sont dans [`app/data/key_players.toml`](app/data/key_players.toml). Après une modification, relance l'app ou l'export. La page du match affiche les pondérations réellement utilisées.
+
+Pour vérifier le classement d'un match, avec le détail des scores : `py -m scripts.check_key_players 2026_08_CAR_GB`.
+
+## Comment sont faits les classements par poste
+
+Réglages : section `[rankings]` de [`app/data/key_players.toml`](app/data/key_players.toml) ; logique : `app/data/rankings.py`.
+
+- **Poste** : la première position reconnue parmi `pff_position`, `ngs_position` et `position` (table `load_players`), puis la position des snaps et celle de `player_stats`. `pff_position` passe en premier parce qu'il distingue les pass rushers (`ED`) des linebackers (`LB`), alors que `position` met LB ou OLB pour les deux. Les codes de chaque poste (EDGE = ED, EDGE, DE, OLB…) sont dans la config.
+- **Titulaire** : dans chaque équipe, le joueur du poste qui a le plus de snaps sur la saison (`load_snap_counts`, offensifs ou défensifs selon le poste) ; pour le kicker, le plus de matchs joués. Un joueur échangé compte pour l'équipe où il a le plus joué (en 2026, Jeffery Simmons compte pour TEN, pas pour CHI).
+- **Score** : celui de la catégorie (score QB, offensif, défensif ou barème kicker du MVP), additionné sur toute la saison, puis divisé par les matchs joués. Sous `min_games` matchs (4), le joueur est grisé en fin de classement.
 
 ## Architecture
 
@@ -285,12 +321,16 @@ app/
     derive.py        scores par quart-temps et 1ers downs, tirés du play-by-play
     models.py        modèles Pydantic (Game, TeamStats, PlayerLine, KeyPlayers…)
     normalize.py     lignes nflverse vers modèles (heure de Paris, valeurs manquantes)
-    key_players.py   logique des joueurs clés
+    key_players.py   joueurs clés d'un match (QB, tops offensif et défensif, kickers)
+    key_players.toml pondérations des joueurs clés
+    rankings.py      classements par poste (titulaire de chaque équipe)
     standings.py     classement
+    team_assets.py   couleurs des points d'équipe (contraste) et chemins des logos
     repository.py    accès aux données normalisées
   static/            front HTML/CSS/JS vanilla (routage par #)
     anim.js          animations discrètes (fondus, cascade, compteurs), coupées si prefers-reduced-motion
     vendor/motion.js Motion 14.4.0 (https://motion.dev, MIT), copie locale
+    logos/           logos des équipes (128 px), logos/dark/ pour le thème sombre
 scripts/             exploration des données et contrôles
 tests/               pytest et jeux d'exemple (fixtures/)
 vercel.json          configuration Vercel (sert dist/, en-têtes de cache)
@@ -308,16 +348,17 @@ Le front ne voit jamais les DataFrames bruts : il ne reçoit que les modèles Py
 | `GET /api/weeks/{n}` | Les matchs d'une semaine (19 à 22 pour les playoffs). |
 | `GET /api/games/{game_id}` | Un match, avec stats d'équipe et joueurs clés. |
 | `GET /api/standings` | Le classement. |
+| `GET /api/rankings` | Les classements par poste. |
 | `GET /api/players/{player_id}` | La saison d'un joueur. |
 | `POST /api/refresh` | Forcer l'actualisation. |
 
 ## Source et limites
 
-- **Source** : nflverse publie ses jeux de données sur GitHub. On utilise le calendrier et les résultats, les stats par joueur et par équipe, les depth charts (des snapshots ESPN datés), les rosters hebdomadaires, les équipes et le play-by-play.
+- **Source** : nflverse publie ses jeux de données sur GitHub. On utilise le calendrier et les résultats, les stats par joueur et par équipe, les stats avancées défensives de PFR (pressions), la table des joueurs (correspondance des identifiants PFR et nflverse, positions), les snaps par match (PFR), les équipes et le play-by-play.
 - **Pas de direct** : nflverse met à jour ses données **quelques heures après les matchs**. Un match qui vient de se terminer peut donc encore apparaître « À venir », ou sans statistiques.
 - **Météo** : elle n'est renseignée que pour une partie des matchs en extérieur, et quasiment jamais sous dôme. Elle s'affiche seulement quand elle existe.
 - **Statistiques des joueurs** : `player_stats` ne contient que les joueurs ayant au moins une stat dans le match. Un titulaire présent sur le terrain mais sans aucune stat est donc traité comme un remplacé, avec la mention « actif sans stat ».
 - **Classement** : le départage des égalités est simplifié (confrontations directes, puis division, conférence et différence de points). Les règles officielles de la NFL vont plus loin. Dans de rares cas d'égalité, l'ordre peut différer du classement officiel.
 - **Playoffs** : les semaines WC, DIV, CONF et SB apparaissent dès que nflverse les ajoute au calendrier.
-- **Visuels** : aucun logo officiel, les équipes sont désignées par leur abréviation. Les photos des joueurs (`headshot_url`) sont chargées depuis le CDN de la NFL et affichées en niveaux de gris.
+- **Couleurs et logos** : couleurs `team_color` / `team_color2` de nflverse. Le point de couleur de chaque équipe prend la couleur secondaire quand la principale contraste trop peu avec le fond (moins de 2:1, calcul WCAG dans `app/data/team_assets.py`), séparément pour le thème clair et le sombre. Les logos (ESPN, via `team_logo_espn`) sont copiés dans `app/static/logos/` en 128 px, avec la variante ESPN pour fond sombre dans `logos/dark/`. Ils ne sont affichés que sur la page d’un match, en couleur, à taille fixe (88 px, 64 px sur mobile). Pour les retélécharger : `py -m scripts.fetch_logos`. Les photos des joueurs (`headshot_url`) sont chargées depuis le CDN de la NFL, qui les recadre sur le visage à 4 fois la taille affichée (l'original fait 3400 × 2450 px et 4 à 6 Mo). Sans photo, une silhouette neutre s'affiche.
 - **Python** : le projet a été développé et testé avec Python 3.13.

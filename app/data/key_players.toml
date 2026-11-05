@@ -1,0 +1,99 @@
+# Joueurs clés d'un match : pondérations et tailles des classements.
+#
+# Modifier une valeur, puis relancer l'app (ou l'export) pour la prendre en
+# compte. La logique qui les utilise est décrite dans app/data/key_players.py.
+
+[offense]
+# Top offensif, les deux équipes confondues, QB exclus (ils ont leur section).
+# score = yards course + yards réception + 20 × TD (course + réception)
+top = 5
+rushing_yards = 1.0
+receiving_yards = 1.0
+touchdowns = 20.0
+
+[defense]
+# Top défensif, les deux équipes confondues.
+# score = 6 × INT + 4 × sacks + 3 × passes défendues + 2 × QB hits
+#         + 1,5 × pressions + 1 × plaquages (solo + assistés)
+# Pressions : stats avancées PFR. Si elles manquent pour un match, le score
+# est calculé sans elles.
+top = 3
+interceptions = 6.0
+sacks = 4.0
+passes_defended = 3.0
+qb_hits = 2.0
+pressures = 1.5
+tackles = 1.0
+
+[mvp]
+# MVP du match : un seul joueur, choisi parmi les joueurs clés de l'équipe
+# gagnante (des deux équipes en cas de match nul).
+#
+# 1. Score brut de chaque catégorie :
+#    QB : 0,4 × yards passe + 15 × TD passe − 20 × INT + yards course + 20 × TD course
+#    offensif et défensif : les scores des tops ci-dessus, tels quels
+#    kicker : 3 × FG réussi + 1 × extra point + 1 par FG réussi de 50 yards ou plus
+# 2. Conversion en percentile dans sa catégorie, par rapport au meilleur score
+#    de chaque équipe dans chaque match de la saison (voir key_players.py).
+# 3. MVP : le percentile le plus élevé (× kicker_factor pour un kicker).
+qb_passing_yards = 0.4
+qb_passing_tds = 15.0
+qb_interceptions = 20.0      # retranché
+qb_rushing_yards = 1.0
+qb_rushing_tds = 20.0
+kicker_fg = 3.0
+kicker_xp = 1.0
+kicker_fg_50_bonus = 1.0   # bonus par FG réussi de 50 yards ou plus
+
+# Malus du kicker sur son percentile : MVP seulement sur un match décisif.
+# Saison 2026 (bonus 50+ à 1) : 4 MVP kickers sur 121 matchs avec 0,66 (6 avec 0,7).
+kicker_factor = 0.66
+
+# Joueurs « réellement impliqués » retenus dans les distributions de référence.
+qb_min_attempts = 10
+offense_min_touches = 1      # courses + réceptions
+kicker_min_attempts = 1      # FG + extra points
+# (défenseur : au moins une stat défensive)
+
+# En dessous de ce nombre de matchs joués dans la saison, la saison précédente
+# complète les distributions de référence (48 ≈ 3 semaines).
+min_reference_games = 48
+
+[rankings]
+# Onglet « Classements » : le titulaire de chaque équipe à chaque poste,
+# classé de 1 à 32 (logique dans app/data/rankings.py).
+#
+# Titulaire : le joueur de l'équipe qui a le plus de snaps sur la saison
+# (offensifs pour l'attaque, défensifs pour la défense ; load_snap_counts),
+# ou le plus de matchs joués pour le kicker. Un joueur échangé compte pour
+# l'équipe où il a le plus joué.
+#
+# Critère : le score de la catégorie (section [mvp] pour QB et kicker,
+# [offense] et [defense] ci-dessus), en moyenne par match joué.
+# En dessous de min_games matchs joués, le joueur passe en fin de
+# classement (grisé).
+min_games = 4
+
+# Sources de la position d'un joueur, par priorité. On retient la première
+# dont le code correspond à un poste ci-dessous (champs de load_players de
+# nflverse ; « snaps » = position dans load_snap_counts, « stats » = position
+# dans player_stats). Un code inconnu (rôle de special teams, ex. KL4) passe
+# donc à la source suivante.
+# pff_position distingue les pass rushers (« ED ») des linebackers
+# (« LB »), ce que ne fait pas « position » (souvent LB ou OLB pour les deux).
+position_sources = ["pff_position", "ngs_position", "position", "snaps", "stats"]
+
+# Postes : score utilisé (qb, offense, defense, kicker) et codes de position
+# qui y mènent, toutes sources confondues. Un joueur dont aucun code n'est
+# dans la liste (OL, P, LS, FB…) n'est pas classé. L'ordre ici est celui du sélecteur.
+[rankings.groups]
+QB   = { score = "qb",      codes = ["QB"] }
+RB   = { score = "offense", codes = ["RB", "HB"] }
+WR   = { score = "offense", codes = ["WR", "SLOT_WR"] }
+TE   = { score = "offense", codes = ["TE"] }
+EDGE = { score = "defense", codes = ["ED", "EDGE", "DE", "OLB"] }
+DT   = { score = "defense", codes = ["DI", "DT", "NT", "DL", "INTERIOR_LINE"] }
+LB   = { score = "defense", codes = ["LB", "ILB", "MLB"] }
+CB   = { score = "defense", codes = ["CB", "SLOT_CB", "DB"] }
+S    = { score = "defense", codes = ["S", "FS", "SS", "SAF", "SAFETY", "HIGH_SAFETY"] }
+K    = { score = "kicker",  codes = ["K", "PK", "FK"] }

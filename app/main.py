@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from .data.cache import SeasonCache
-from .data.models import DivisionStandings, Game, GameDetail, Meta, PlayerSeason, Team
+from .data.models import DivisionStandings, Game, GameDetail, Meta, PlayerSeason, Rankings, Team
 from .data.repository import NflRepository
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -55,6 +55,11 @@ def game(game_id: str) -> GameDetail:
 @app.get("/api/standings", response_model=list[DivisionStandings])
 def standings() -> list[DivisionStandings]:
     return repo.standings()
+
+
+@app.get("/api/rankings", response_model=Rankings)
+def rankings() -> Rankings:
+    return repo.rankings()
 
 
 @app.get("/api/players/{player_id}", response_model=PlayerSeason)

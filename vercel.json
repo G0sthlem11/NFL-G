@@ -23,6 +23,10 @@
       "headers": [{ "key": "Cache-Control", "value": "private, max-age=31536000, immutable" }]
     },
     {
+      "source": "/logos/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "private, max-age=604800" }]
+    },
+    {
       "source": "/config.js",
       "headers": [{ "key": "Cache-Control", "value": "private, max-age=31536000, immutable" }]
     },

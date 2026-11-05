@@ -12,6 +12,7 @@ la réponse de l'endpoint correspondant : aucune logique n'est dupliquée.
     /api/meta                ->  data/meta.json        (+ generated_at)
     /api/teams               ->  data/teams.json
     /api/standings           ->  data/standings.json
+    /api/rankings            ->  data/rankings.json
     /api/weeks/{n}           ->  data/weeks/{n}.json
     /api/games/{game_id}     ->  data/games/{game_id}.json
     /api/players/{player_id} ->  data/players/{player_id}.json
@@ -135,6 +136,7 @@ def _export_with(client: TestClient, repo: NflRepository, out: Path, previous_re
         _write(data / "meta.json", _compact(meta))
         _write(data / "teams.json", get("/api/teams"))
         _write(data / "standings.json", get("/api/standings"))
+        _write(data / "rankings.json", get("/api/rankings"))
 
         weeks = [w["week"] for w in meta["weeks"]]
         for n in weeks:
