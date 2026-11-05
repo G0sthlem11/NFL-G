@@ -10,6 +10,8 @@ __pycache__/
 # Export statique (généré par py -m app.export, déployé par la GitHub Action)
 /dist/
 /.vercel/
+/data-hash.txt
+/.last-deploy/
 
 # Éditeurs / OS
 .vscode/

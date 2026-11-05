@@ -1,0 +1,121 @@
+# Régénère les données (export statique) et déploie dist/ en production sur Vercel.
+#
+# Déclencheurs : toutes les 6 h, à chaque push sur main, et à la main (onglet Actions).
+# Sur les exécutions planifiées, le déploiement est sauté si les données n'ont pas
+# changé depuis le dernier déploiement (empreinte de dist/data/ gardée en cache).
+# Si le téléchargement nflverse ou les tests échouent, rien n'est déployé : le site
+# garde sa version précédente.
+#
+# Secrets requis (Settings > Secrets and variables > Actions) :
+#   VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+
+name: Déploiement Vercel
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"  # 00:17, 06:17, 12:17, 18:17 UTC (décalé de l'heure pile, plus chargée)
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Jamais deux déploiements en parallèle ; un déploiement en cours n'est pas interrompu.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    steps:
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      - name: Installer Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Installer les dépendances
+        run: python -m pip install -r requirements.txt
+
+      # --refresh : téléchargement nflverse forcé ; en cas d'échec, l'étape échoue
+      # et le workflow s'arrête ici, sans déployer.
+      - name: Exporter le site statique
+        run: python -m app.export --refresh --out dist --hash-file data-hash.txt
+
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Récupérer l'empreinte du dernier déploiement
+        uses: actions/cache/restore@v4
+        with:
+          path: .last-deploy
+          key: last-deploy-${{ github.run_id }}
+          restore-keys: last-deploy-
+
+      - name: Décider du déploiement
+        id: decide
+        env:
+          HAS_TOKEN: ${{ secrets.VERCEL_TOKEN != '' && secrets.VERCEL_ORG_ID != '' && secrets.VERCEL_PROJECT_ID != '' }}
+        run: |
+          new=$(cat data-hash.txt)
+          old=$(cat .last-deploy/hash 2>/dev/null || echo "aucune")
+          echo "Empreinte actuelle : $new"
+          echo "Dernier déploiement : $old"
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Secrets Vercel absents (VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID) : export et tests OK, déploiement sauté."
+            echo "Secrets Vercel absents : déploiement sauté (voir README, section Déploiement)." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ github.event_name }}" = "schedule" ] && [ "$new" = "$old" ]; then
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "Données inchangées depuis le dernier déploiement : déploiement sauté." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Installer Node.js
+        if: steps.decide.outputs.deploy == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Installer la CLI Vercel
+        if: steps.decide.outputs.deploy == 'true'
+        run: npm install --global vercel@latest
+
+      - name: Récupérer la configuration du projet Vercel
+        if: steps.decide.outputs.deploy == 'true'
+        run: vercel pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Construire (copie de dist/)
+        if: steps.decide.outputs.deploy == 'true'
+        run: vercel build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Déployer en production
+        if: steps.decide.outputs.deploy == 'true'
+        run: |
+          url=$(vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}")
+          echo "Déployé : $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Mémoriser l'empreinte déployée
+        if: steps.decide.outputs.deploy == 'true'
+        run: |
+          mkdir -p .last-deploy
+          cp data-hash.txt .last-deploy/hash
+
+      - name: Sauvegarder l'empreinte
+        if: steps.decide.outputs.deploy == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .last-deploy
+          key: last-deploy-${{ github.run_id }}
