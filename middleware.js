@@ -12,8 +12,10 @@
 // S'il en manque une, le site refuse tout (503) au lieu de s'ouvrir.
 //
 // Ce fichier ne sert qu'en ligne : le mode local (FastAPI) n'est pas concerné.
-
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+//
+// Uniquement des API Web standard (Web Crypto, TextEncoder, btoa/atob) : pas de
+// `node:*` ni de `Buffer`, absents du runtime Edge sur lequel Vercel compile ce
+// middleware. Le même code tourne sous Node 22 pour les tests.
 
 export const COOKIE_NAME = "gd_session";
 export const SESSION_SECONDS = 365 * 24 * 3600; // 1 an : pas de reconnexion dans l'app installée
@@ -40,35 +42,62 @@ export function _resetForTests() {
   failures.clear();
 }
 
-// --- Signature du cookie ----------------------------------------------------
-const b64url = (buf) => Buffer.from(buf).toString("base64url");
-const hmac = (secret, data) => createHmac("sha256", secret).update(data).digest();
+// --- Signature du cookie (Web Crypto) --------------------------------------
+const encoder = new TextEncoder();
+const keys = new Map(); // secret -> Promise<CryptoKey>, importée une fois par instance
 
-export function signSession(secret, nowSeconds = Math.floor(Date.now() / 1000)) {
-  const payload = `v1.${nowSeconds + SESSION_SECONDS}`;
-  return `${payload}.${b64url(hmac(secret, payload))}`;
+function hmacKey(secret) {
+  if (!keys.has(secret)) {
+    keys.set(secret, crypto.subtle.importKey(
+      "raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+    ));
+  }
+  return keys.get(secret);
 }
 
-export function verifySession(token, secret, nowSeconds = Math.floor(Date.now() / 1000)) {
+function b64urlEncode(bytes) {
+  let bin = "";
+  for (const b of new Uint8Array(bytes)) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function b64urlDecode(text) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(text)) return null;
+  const b64 = text.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (text.length % 4)) % 4);
+  try {
+    return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+export async function signSession(secret, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const payload = `v1.${nowSeconds + SESSION_SECONDS}`;
+  const sig = await crypto.subtle.sign("HMAC", await hmacKey(secret), encoder.encode(payload));
+  return `${payload}.${b64urlEncode(sig)}`;
+}
+
+export async function verifySession(token, secret, nowSeconds = Math.floor(Date.now() / 1000)) {
   if (typeof token !== "string") return false;
   const parts = token.split(".");
   if (parts.length !== 3 || parts[0] !== "v1" || !/^\d{1,12}$/.test(parts[1])) return false;
   if (Number(parts[1]) <= nowSeconds) return false; // expiré
-  const expected = hmac(secret, `${parts[0]}.${parts[1]}`);
-  let given;
-  try {
-    given = Buffer.from(parts[2], "base64url");
-  } catch {
-    return false;
-  }
-  return given.length === expected.length && timingSafeEqual(given, expected);
+  const sig = b64urlDecode(parts[2]);
+  if (!sig) return false;
+  // crypto.subtle.verify compare la signature à durée constante.
+  return crypto.subtle.verify("HMAC", await hmacKey(secret), sig, encoder.encode(`${parts[0]}.${parts[1]}`));
 }
 
-function samePassword(input, expected) {
-  // Comparaison à durée constante, quelles que soient les longueurs.
-  const a = createHash("sha256").update(String(input)).digest();
-  const b = createHash("sha256").update(String(expected)).digest();
-  return timingSafeEqual(a, b);
+async function samePassword(input, expected) {
+  // Empreintes SHA-256 de même longueur, comparées à durée constante.
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(String(input))),
+    crypto.subtle.digest("SHA-256", encoder.encode(String(expected))),
+  ]);
+  const x = new Uint8Array(a), y = new Uint8Array(b);
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
+  return diff === 0;
 }
 
 // --- Petits utilitaires -----------------------------------------------------
@@ -207,7 +236,7 @@ export default async function middleware(request) {
   const secret = process.env.SESSION_SECRET || "";
   if (password.length < 12 || secret.length < 32) return configErrorPage();
 
-  const authenticated = verifySession(readCookie(request.headers.get("cookie"), COOKIE_NAME), secret);
+  const authenticated = await verifySession(readCookie(request.headers.get("cookie"), COOKIE_NAME), secret);
 
   if (path === LOGOUT_PATH) {
     return redirect(LOGIN_PATH, 303, {
@@ -249,13 +278,13 @@ async function handleLogin(request, password, secret) {
     return loginPage({ next, error: "Trop d'essais. Réessaie dans quelques minutes.", status: 429 });
   }
 
-  if (!samePassword(form.get("password") || "", password)) {
+  if (!(await samePassword(form.get("password") || "", password))) {
     recordFailure(ip, now);
     await sleep(failDelayMs());
     return loginPage({ next, error: "Mot de passe incorrect.", status: 401 });
   }
 
   failures.delete(ip);
-  const cookie = `${COOKIE_NAME}=${signSession(secret)}; Path=/; Max-Age=${SESSION_SECONDS}; HttpOnly; Secure; SameSite=Lax`;
+  const cookie = `${COOKIE_NAME}=${await signSession(secret)}; Path=/; Max-Age=${SESSION_SECONDS}; HttpOnly; Secure; SameSite=Lax`;
   return redirect(safeNext(next) + safeHash(form.get("hash")), 303, { "Set-Cookie": cookie });
 }

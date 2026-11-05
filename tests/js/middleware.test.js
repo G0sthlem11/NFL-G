@@ -57,24 +57,24 @@ test("données sans cookie : 401 JSON, jamais le contenu", async () => {
 });
 
 test("cookie valide : la requête continue", async () => {
-  const token = signSession(SECRET);
+  const token = await signSession(SECRET);
   assert.equal(await get("/", token), undefined);
   assert.equal(await get("/data/games/2026_08_CAR_GB.json", token), undefined);
 });
 
 test("cookie falsifié, mal formé, expiré ou signé avec un autre secret : refusé", async () => {
   const now = Math.floor(Date.now() / 1000);
-  const good = signSession(SECRET);
+  const good = await signSession(SECRET);
   const [v, exp, sig] = good.split(".");
   const bad = [
     `${v}.${Number(exp) + 999}.${sig}`,                  // expiration modifiée
     `${v}.${exp}.${sig.slice(0, -2)}AA`,                 // signature modifiée
-    signSession("un-autre-secret-0123456789abcdefghij"), // autre secret
-    signSession(SECRET, now - SESSION_SECONDS - 10),     // expiré
+    await signSession("un-autre-secret-0123456789abcdefghij"), // autre secret
+    await signSession(SECRET, now - SESSION_SECONDS - 10),     // expiré
     "n'importe-quoi", "", "v1.123", "v2.9999999999.abc",
   ];
   for (const token of bad) {
-    assert.equal(verifySession(token, SECRET), false, token);
+    assert.equal(await verifySession(token, SECRET), false, token);
     const r = await get("/data/meta.json", token);
     assert.equal(r.status, 401, token);
   }
@@ -89,7 +89,7 @@ test("connexion réussie : cookie signé HttpOnly Secure SameSite=Lax d'un an", 
     assert.ok(cookie.includes(attr), attr);
   }
   const token = cookie.split(";")[0].split("=").slice(1).join("=");
-  assert.ok(verifySession(token, SECRET));
+  assert.ok(await verifySession(token, SECRET));
   assert.equal(await get("/", token), undefined);
 });
 
@@ -113,7 +113,7 @@ test("page de connexion servie sans cookie, et déjà connecté -> redirection",
   assert.match(html, /type="password"/);
   assert.match(html, /Fraunces/);
   assert.ok(!html.includes(PASSWORD));
-  const again = await get("/login?next=%2F", signSession(SECRET));
+  const again = await get("/login?next=%2F", await signSession(SECRET));
   assert.equal(again.status, 302);
   assert.equal(again.headers.get("location"), "/");
 });
@@ -128,7 +128,7 @@ test("pas de redirection ouverte après connexion", () => {
 });
 
 test("déconnexion : cookie effacé", async () => {
-  const r = await get("/logout", signSession(SECRET));
+  const r = await get("/logout", await signSession(SECRET));
   assert.equal(r.status, 303);
   assert.match(r.headers.get("set-cookie"), /Max-Age=0/);
 });
@@ -141,5 +141,22 @@ test("variables absentes ou trop courtes : tout est refusé (503), sauf les icô
     assert.equal((await get("/data/meta.json")).status, 503);
     assert.equal((await get("/login")).status, 503);
     assert.equal(await get("/icon-512.png"), undefined);
+  }
+});
+
+test("compatible runtime Edge : aucun module node:, ni Buffer, ni require", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const src = await readFile(new URL("../../middleware.js", import.meta.url), "utf8");
+  const code = src.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n"); // hors commentaires
+  assert.doesNotMatch(code, /from\s+["']node:/);
+  assert.doesNotMatch(code, /import\s*\(\s*["']node:/);
+  assert.doesNotMatch(code, /\bBuffer\b/);
+  assert.doesNotMatch(code, /\brequire\s*\(/);
+});
+
+test("un cookie quelconque ne donne jamais accès aux pages", async () => {
+  for (const token of ["x", "v1.9999999999.AAAA", await signSession("autre-secret-0123456789abcdefghijkl")]) {
+    const r = await get("/", token);
+    assert.equal(r?.status, 302, token);
   }
 });
