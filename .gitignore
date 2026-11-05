@@ -1,11 +1,11 @@
-# Environnement Python
+﻿# Environnement Python
 .venv/
 __pycache__/
 *.pyc
 .pytest_cache/
 
 # Cache local des données nflverse
-data/
+/data/
 
 # Éditeurs / OS
 .vscode/
