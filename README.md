@@ -144,7 +144,7 @@ Le fichier `.github/workflows/deploy.yml` est une GitHub Action. Elle se déclen
 - à chaque push sur `main`, sauf si seuls des fichiers `.md` ou `scripts/` changent. Le push réutilise les données en cache si elles ont moins de 6 h ;
 - à la demande, depuis l'onglet Actions (**Run workflow**), avec ou sans retéléchargement des données.
 
-Consommation : environ 3 minutes par exécution, soit **une centaine de minutes par mois** en saison (quota gratuit d'un dépôt privé : 2 000). Les dépendances pip, les paquets npm de la CLI Vercel et les données nflverse sont en cache entre deux exécutions ; la saison précédente, figée, n'est jamais retéléchargée. Une exécution bloquée s'arrête au bout de 15 minutes, et une nouvelle exécution annule celle en cours.
+Consommation : environ 1 minute par exécution. Le calendrier prévoit 4 exécutions par semaine (dimanche, lundi, mardi, vendredi), soit environ 17 par mois de septembre à février, et aucune hors saison. Cela fait **une vingtaine de minutes par mois** en saison, plus une minute par push ou par lancement manuel (quota gratuit d'un dépôt privé : 2 000). Les dépendances pip, les paquets npm de la CLI Vercel et les données nflverse sont en cache entre deux exécutions ; la saison précédente, figée, n'est jamais retéléchargée. Une exécution bloquée s'arrête au bout de 15 minutes, et une nouvelle exécution annule celle en cours.
 
 À chaque exécution, elle enchaîne ces étapes :
 
@@ -234,7 +234,7 @@ Avec ce réglage :
 **6. Premier déploiement et vérification**
 
 1. Sur GitHub, va dans l'onglet **Actions**, choisis **Déploiement Vercel**, puis **Run workflow → main → Run workflow**.
-2. Attends la coche verte, environ 4 à 5 minutes. Le résumé de l'exécution affiche l'URL déployée.
+2. Attends la coche verte, environ 1 minute. Le résumé de l'exécution affiche l'URL déployée.
 3. Ouvre <https://nfl-g.vercel.app> dans une **fenêtre de navigation privée** : la page « Accès privé » de Gameday doit s'afficher. Saisis le mot de passe : le site s'affiche.
 4. Sur ton téléphone, ouvre le site dans Chrome et connecte-toi. Choisis ensuite **⋮ → Installer l'application** (ou « Ajouter à l'écran d'accueil » puis « Installer »). L'app s'ouvre alors en plein écran. La session dure un an.
 
@@ -262,7 +262,7 @@ C'est `middleware.js`, un Routing Middleware Vercel, qui protège le site en lig
 ### Limites de la version en ligne
 
 - **Fraîcheur des données** : les stats d'un match arrivent le lendemain matin (exécution de 08:17 UTC), à condition que nflverse les ait publiées ; sinon, à l'exécution suivante. GitHub peut aussi retarder les exécutions planifiées de quelques minutes, parfois davantage. Pour forcer une mise à jour, lance le workflow à la main.
-- **Minutes GitHub Actions** : une exécution dure environ 4 à 5 minutes, soit environ 500 minutes par mois. Le quota gratuit d'un dépôt privé est de 2 000 minutes par mois.
+- **Minutes GitHub Actions** : une exécution dure environ 1 minute, soit **une vingtaine de minutes par mois** en saison (environ 17 exécutions planifiées), plus une minute par push ou par lancement manuel. Le quota gratuit d'un dépôt privé est de 2 000 minutes par mois.
 - **Token Vercel** : à son expiration, les déploiements échouent et le site reste sur sa dernière version. Il suffit alors de recréer le token et de mettre à jour le secret `VERCEL_TOKEN`.
 - **Niveau de protection** : un mot de passe unique protège moins bien qu'un compte Vercel avec double authentification. Pour des statistiques NFL publiques, c'est un compromis acceptable. Garde le mot de passe pour toi seul, et change `SESSION_SECRET` en cas de doute.
 
