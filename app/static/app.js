@@ -241,11 +241,12 @@ function gameRow(g, eager = false) {
     awayCls = awayWins ? "is-winner" : "is-loser";
     homeCls = awayWins ? "is-loser" : "is-winner";
   }
+  // Match terminé : le score suffit, seule la prolongation est signalée.
   const status = final
-    ? `<span>Final</span>${g.overtime ? "<span>Prol.</span>" : ""}`
+    ? (g.overtime ? "<span>Prol.</span>" : "")
     : "<span>À venir</span>";
   const label = final
-    ? `${g.away_team} ${g.away_score}, ${g.home_team} ${g.home_score}`
+    ? `${g.away_team} ${g.away_score}, ${g.home_team} ${g.home_score}${g.overtime ? ", après prolongation" : ""}`
     : `${g.away_team} chez ${g.home_team}, ${time}`;
   return `
     <a class="game ${final ? "is-final" : "is-scheduled"}" href="#/game/${esc(g.game_id)}" aria-label="${esc(label)}">
@@ -355,7 +356,7 @@ async function renderWeek(week) {
   const byesHtml = week <= 18 && byes.length
     ? `<p class="byes"><span class="byes-label">Au repos</span>${byes.map((t) => teamBadge(t, { size: 18, cls: "bye-team" })).join("")}</p>` : "";
 
-  render(days + byesHtml);
+  render(`<div class="days">${days}</div>${byesHtml}`);
 }
 
 // Semaine courante visible dans le sélecteur (utile sur mobile, où il défile).

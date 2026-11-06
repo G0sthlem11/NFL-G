@@ -51,6 +51,15 @@ def test_logo_path(tmp_path, monkeypatch):
     assert logo_path("KC", dark=True, small=True) == "logos/48/dark/KC.png"
 
 
+@pytest.mark.parametrize("abbr", sorted(ta.COLOR_LOGO_IN_DARK))
+def test_color_logo_kept_in_dark_theme(abbr):
+    """Variante sombre ESPN toute blanche (Rams, Jets) : logo couleur dans les deux thèmes."""
+    assert logo_path(abbr) == f"logos/{abbr}.png"
+    assert logo_path(abbr, dark=True) is None
+    assert logo_path(abbr, dark=True, small=True) is None
+    assert logo_path("KC", dark=True) == "logos/dark/KC.png"  # les autres gardent leur variante
+
+
 def _png_size(path):
     """Largeur et hauteur d'un PNG, lues dans son en-tête IHDR (sans Pillow)."""
     head = path.read_bytes()[:24]

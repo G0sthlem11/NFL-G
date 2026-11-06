@@ -1,5 +1,7 @@
 """L'export statique doit produire exactement les réponses de l'API."""
+import hashlib
 import json
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -52,7 +54,11 @@ def test_front_copied_in_static_mode(exported):
     assert (res.out / "index.html").exists() and (res.out / "app.js").exists()
     assert 'mode: "static"' in (res.out / "config.js").read_text(encoding="utf-8")
     html = (res.out / "index.html").read_text(encoding="utf-8")
-    assert "?v=12" not in html and 'src="app.js?v=' in html  # versions = empreinte du contenu
+    # Versions = empreinte du contenu de chaque fichier (et non plus ?v=28…).
+    versioned = re.findall(r'(?:href|src)="([\w.-][\w./-]*)\?v=([^"]*)"', html)
+    assert "app.js" in dict(versioned)
+    for path, ver in versioned:
+        assert ver == hashlib.sha256((res.out / path).read_bytes()).hexdigest()[:10], path
 
 
 def test_content_hash_ignores_generation_time(exported, tmp_path):

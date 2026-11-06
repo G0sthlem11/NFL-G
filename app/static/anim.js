@@ -145,7 +145,8 @@
 
   // --- Survol -----------------------------------------------------------
   // Cartes de match : les logos grossissent à peine, les équipes glissent
-  // de 3 px. Motion ignore les survols émulés par le tactile.
+  // de 3 px (le fond de la carte change en CSS). Motion ignore les survols
+  // émulés par le tactile.
   function hoverGames(view) {
     const games = view.querySelectorAll(".game");
     if (!games.length) return;

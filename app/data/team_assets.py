@@ -32,6 +32,12 @@ LOGO_DIR = Path(__file__).resolve().parents[1] / "static" / "logos"
 # générés depuis les 128 px par ``py -m scripts.resize_logos``.
 SMALL_LOGO_PX = 48
 
+# Équipes dont la variante ESPN « 500-dark » est une silhouette blanche, sans
+# couleur, qui détonne à côté des autres logos : on garde le logo couleur en
+# thème sombre aussi. scripts.resize_logos signale toute nouvelle équipe dans
+# ce cas. LAR et STL : anciennes abréviations des Rams (même logo que LA).
+COLOR_LOGO_IN_DARK = frozenset({"LA", "LAR", "STL", "NYJ"})
+
 
 def _luminance(hex_color: str) -> float | None:
     """Luminance relative WCAG d'une couleur #rrggbb, ou None si illisible."""
@@ -70,7 +76,11 @@ def dot_color(primary: str | None, secondary: str | None, background: str) -> st
 def logo_path(abbr: str, dark: bool = False, small: bool = False) -> str | None:
     """Chemin du logo relatif à la racine du site, s'il existe.
     ``dark`` : variante pour fond sombre (logos/dark/<ABBR>.png).
-    ``small`` : version réduite (logos/48/…), générée par scripts.resize_logos."""
+    ``small`` : version réduite (logos/48/…), générée par scripts.resize_logos.
+    Pas de variante sombre pour COLOR_LOGO_IN_DARK : le front garde alors le
+    logo couleur dans les deux thèmes."""
+    if dark and abbr in COLOR_LOGO_IN_DARK:
+        return None
     rel = f"dark/{abbr}.png" if dark else f"{abbr}.png"
     if small:
         rel = f"{SMALL_LOGO_PX}/{rel}"
