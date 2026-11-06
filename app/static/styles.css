@@ -268,28 +268,23 @@ main:focus { outline: none; }
 
 .game-status .time { font-variant-numeric: tabular-nums; color: var(--ink-2); }
 
+/* Logo + abréviation (teamBadge dans app.js). Alignement : le badge prend la
+   ligne de base de son texte, le logo est centré sur la hauteur de la ligne. */
+.team-badge { display: inline-flex; align-items: baseline; gap: 7px; min-width: 0; vertical-align: baseline; }
+.team-logo-wrap { display: flex; flex: 0 0 auto; align-self: center; }
+.team-logo { display: block; object-fit: contain; }
+.tb-text { white-space: nowrap; }
+
 .team-line {
   display: grid;
-  grid-template-columns: 10px 3.2em minmax(0, 1fr) auto;
+  grid-template-columns: 96px auto;
+  justify-content: start;
   align-items: baseline;
   column-gap: 10px;
   color: var(--ink-2);
 }
 
 .team-line + .team-line { margin-top: 2px; }
-
-.pill {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--team, var(--rule));
-  box-shadow: 0 0 0 1px var(--rule);
-  align-self: center;
-}
-
-@media (prefers-color-scheme: dark) {
-  .pill { background: var(--team-dark, var(--team, var(--rule))); }
-}
 
 .abbr {
   font-family: var(--font-display);
@@ -298,14 +293,6 @@ main:focus { outline: none; }
   letter-spacing: 0.01em;
   color: var(--ink);
 }
-
-.team-name {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: 15px;
-}
-.team-name .nick { display: none; }
 
 .score {
   font-family: var(--font-display);
@@ -323,8 +310,6 @@ main:focus { outline: none; }
 
 @media (max-width: 420px) {
   .game { grid-template-columns: 52px 1fr; gap: 8px; }
-  .team-name .full { display: none; }
-  .team-name .nick { display: inline; }
 }
 
 /* Équipes au repos : un peu plus présentes qu'une note de bas de page. */
@@ -602,13 +587,12 @@ td { text-align: right; }
 .standings .st-team { text-align: left; white-space: nowrap; width: 40%; }
 .st-team-inner { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .st-abbr { font-family: var(--font-display); font-weight: 500; font-size: 17px; min-width: 2.6em; }
-.st-name { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; }
 .standings .st-pct { color: var(--ink); font-weight: 600; }
 .standings .st-streak { color: var(--muted); }
 .standings .is-leader .st-abbr { font-weight: 600; }
 
 @media (max-width: 640px) {
-  .standings .opt, .st-name { display: none; }
+  .standings .opt { display: none; }
   .standings .st-team { width: auto; }
 }
 
@@ -661,9 +645,6 @@ td { text-align: right; }
 /* Marge avant le filet d'un bloc : le dernier chiffre ne colle pas au trait. */
 .game-log-key :is(td, th):has(+ .grp-start), .rankings :is(td, th):has(+ .grp-start) { padding-right: 14px; }
 .gl-ha { display: inline-block; min-width: 1.7em; font-size: 13px; color: var(--muted); }
-.mini-logo-wrap { display: inline-flex; vertical-align: middle; }
-.mini-logo { display: block; width: 22px; height: 22px; object-fit: contain; }
-.abbr-fallback { font-size: 13px; color: var(--ink-2); }
 .totals-row { display: flex; flex-wrap: wrap; gap: 0 48px; }
 .totals-row .totals-group { flex: 0 1 auto; }
 .totals-row .stat-cells { display: flex; flex-wrap: wrap; gap: 6px 32px; }
@@ -697,7 +678,7 @@ td { text-align: right; }
 .rankings tbody .rk-name { font-weight: 400; color: var(--ink); }
 .rankings .rk-score { color: var(--ink); font-weight: 600; }
 .rankings tr.is-low td, .rankings tr.is-low th { color: var(--muted); font-weight: 400; }
-.rankings tr.is-low .headshot, .rankings tr.is-low .mini-logo { opacity: 0.45; }
+.rankings tr.is-low .headshot, .rankings tr.is-low .team-logo { opacity: 0.45; }
 .rk-sort {
   padding: 0; border: 0; background: none; cursor: pointer;
   font: inherit; color: inherit; text-align: inherit; white-space: nowrap;

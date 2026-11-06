@@ -62,6 +62,14 @@ test("cookie valide : la requête continue", async () => {
   assert.equal(await get("/data/games/2026_08_CAR_GB.json", token), undefined);
 });
 
+test("logos d'équipe : privés, servis avec une session", async () => {
+  const token = await signSession(SECRET);
+  for (const path of ["/logos/KC.png", "/logos/dark/KC.png", "/logos/48/KC.png", "/logos/48/dark/KC.png"]) {
+    assert.equal((await get(path)).status, 302, path);
+    assert.equal(await get(path, token), undefined, path);
+  }
+});
+
 test("cookie falsifié, mal formé, expiré ou signé avec un autre secret : refusé", async () => {
   const now = Math.floor(Date.now() / 1000);
   const good = await signSession(SECRET);

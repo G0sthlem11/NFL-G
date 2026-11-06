@@ -60,6 +60,8 @@ class NflRepository:
                 color=c1, color2=c2,
                 dot_light=dot_color(c1, c2, PAPER_LIGHT), dot_dark=dot_color(c1, c2, PAPER_DARK),
                 logo=logo_path(r["team_abbr"]), logo_dark=logo_path(r["team_abbr"], dark=True),
+                logo_sm=logo_path(r["team_abbr"], small=True),
+                logo_sm_dark=logo_path(r["team_abbr"], dark=True, small=True),
             ))
         return teams
 

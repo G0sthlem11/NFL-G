@@ -124,7 +124,7 @@ py -m pytest
 |---|---|
 | `tests/test_key_players.py` | Joueurs clés par équipe : quarterbacks, scores et départages, pressions absentes, kickers, joueur échangé, abréviations d'équipe, fichier de pondérations. |
 | `tests/test_rankings.py` | Classements par poste : sources de position, titulaire aux snaps, joueur échangé, moyenne par match et minimum de matchs, kicker. |
-| `tests/test_team_assets.py` | Couleurs des points d'équipe (contraste) et chemins des logos. |
+| `tests/test_team_assets.py` | Couleurs d'équipe (contraste), chemins des logos, et version 48 px de chaque logo. |
 | `tests/test_standings.py` | Calcul du classement. |
 | `tests/test_data_layer.py` | Cache et normalisation. |
 | `tests/test_api.py` | API de bout en bout, sur une mini-saison fictive sans accès réseau. |
@@ -327,12 +327,12 @@ app/
     key_players.toml pondérations des joueurs clés
     rankings.py      classements par poste (titulaire de chaque équipe)
     standings.py     classement
-    team_assets.py   couleurs des points d'équipe (contraste) et chemins des logos
+    team_assets.py   couleurs d'équipe (contraste) et chemins des logos (128 et 48 px)
     repository.py    accès aux données normalisées
   static/            front HTML/CSS/JS vanilla (routage par #)
     anim.js          animations discrètes (fondus, cascade, compteurs), coupées si prefers-reduced-motion
     vendor/motion.js Motion 14.4.0 (https://motion.dev, MIT), copie locale
-    logos/           logos des équipes (128 px), logos/dark/ pour le thème sombre
+    logos/           logos des équipes (128 px), logos/dark/ pour le thème sombre, logos/48/ en petit
 scripts/             exploration des données et contrôles
 tests/               pytest et jeux d'exemple (fixtures/)
 vercel.json          configuration Vercel (sert dist/, en-têtes de cache)
@@ -362,5 +362,12 @@ Le front ne voit jamais les DataFrames bruts : il ne reçoit que les modèles Py
 - **Statistiques des joueurs** : `player_stats` ne contient que les joueurs ayant au moins une stat dans le match. Un titulaire présent sur le terrain mais sans aucune stat est donc traité comme un remplacé, avec la mention « actif sans stat ».
 - **Classement** : le départage des égalités est simplifié (confrontations directes, puis division, conférence et différence de points). Les règles officielles de la NFL vont plus loin. Dans de rares cas d'égalité, l'ordre peut différer du classement officiel.
 - **Playoffs** : les semaines WC, DIV, CONF et SB apparaissent dès que nflverse les ajoute au calendrier.
-- **Couleurs et logos** : couleurs `team_color` / `team_color2` de nflverse. Le point de couleur de chaque équipe prend la couleur secondaire quand la principale contraste trop peu avec le fond (moins de 2:1, calcul WCAG dans `app/data/team_assets.py`), séparément pour le thème clair et le sombre. Les logos (ESPN, via `team_logo_espn`) sont copiés dans `app/static/logos/` en 128 px, avec la variante ESPN pour fond sombre dans `logos/dark/`. Ils ne sont affichés que sur la page d’un match, en couleur, à taille fixe (88 px, 64 px sur mobile). Pour les retélécharger : `py -m scripts.fetch_logos`. Les photos des joueurs (`headshot_url`) sont chargées depuis le CDN de la NFL, qui les recadre sur le visage à 4 fois la taille affichée (l'original fait 3400 × 2450 px et 4 à 6 Mo). Sans photo, une silhouette neutre s'affiche.
+- **Couleurs et logos** :
+  - **Couleurs** : `team_color` / `team_color2` de nflverse. Elles ne servent plus qu'aux liserés (carte du MVP, gagnant dans l'en-tête d'un match). Chaque équipe prend sa couleur secondaire quand la principale contraste trop peu avec le fond (moins de 2:1, calcul WCAG dans `app/data/team_assets.py`), séparément pour le thème clair et le sombre.
+  - **Logos partout** : chaque équipe s'affiche avec son logo et son abréviation de 3 lettres, sans son nom en toutes lettres (il apparaît au survol). Un seul composant les produit, `teamBadge` dans `app.js` : page Semaine, équipes au repos, classement, classements par poste, page joueur, titres des joueurs clés. Seuls les tableaux par quart-temps et de stats d'équipe gardent l'abréviation seule, puisque les grands logos sont juste au-dessus.
+  - **Tailles** : 22 px dans les listes, 20 px dans le classement, 18 px dans les tableaux, 24 px dans les titres. Les grands logos de l'en-tête d'un match font 88 px (64 px sur mobile).
+  - **Fichiers** : les logos (ESPN, via `team_logo_espn`) sont copiés dans `app/static/logos/` en 128 px, avec la variante ESPN pour fond sombre dans `logos/dark/`. Le thème sombre bascule tout seul sur cette variante (`<picture>` et `prefers-color-scheme`). Pour les retélécharger : `py -m scripts.fetch_logos`.
+  - **Petits logos** : les grands logos de 128 px servent à l'en-tête d'un match ; partout ailleurs, on utilise des versions de 48 px (`logos/48/` et `logos/48/dark/`), qui suffisent pour un écran haute densité. Avec une palette de 256 couleurs, les 72 fichiers passent de 494 Ko à 124 Ko (75 % de moins, environ 1,7 Ko par logo). Pour les régénérer après `fetch_logos` : `py -m scripts.resize_logos`. Ce script exige Pillow (`py -m pip install pillow`), dont ni l'app ni l'Action n'ont besoin, puisque les fichiers sont versionnés.
+  - **Chargement et accessibilité** : `width` et `height` fixes (pas de saut de mise en page), et `loading="lazy"` hors de l'écran initial. L'`alt` est vide, car l'abréviation, juste à côté, est lue une seule fois. Si un logo ne charge pas, il disparaît et l'abréviation reste.
+- **Photos des joueurs** : les photos des joueurs (`headshot_url`) sont chargées depuis le CDN de la NFL, qui les recadre sur le visage à 4 fois la taille affichée (l'original fait 3400 × 2450 px et 4 à 6 Mo). Sans photo, une silhouette neutre s'affiche.
 - **Python** : le projet a été développé et testé avec Python 3.13.

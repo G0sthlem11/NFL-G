@@ -176,6 +176,9 @@ class Team(BaseModel):
     # Logo local, relatif à la racine du site (logos/KC.png), s'il existe.
     logo: str | None = None
     logo_dark: str | None = None  # variante pour fond sombre (logos/dark/KC.png)
+    # Petits logos 48 px, à côté des abréviations (logos/48/KC.png, logos/48/dark/KC.png).
+    logo_sm: str | None = None
+    logo_sm_dark: str | None = None
 
 
 class StandingRow(BaseModel):

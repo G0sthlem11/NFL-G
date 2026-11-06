@@ -11,6 +11,8 @@ Logos : copies locales des logos ESPN (team_logo_espn), dans
 app/static/logos/<ABBR>.png (thème clair) et logos/dark/<ABBR>.png (variante
 ESPN pour fond sombre), téléchargées une fois par
 ``py -m scripts.fetch_logos`` et versionnées. Aucun appel à ESPN au runtime.
+Versions réduites en 48 px dans logos/48/ (et logos/48/dark/), pour les
+petits logos à côté des abréviations.
 """
 from __future__ import annotations
 
@@ -25,6 +27,10 @@ PAPER_DARK = "#15140f"
 MIN_CONTRAST = 2.0
 
 LOGO_DIR = Path(__file__).resolve().parents[1] / "static" / "logos"
+
+# Petits logos (à côté des abréviations, 16 à 24 px affichés) : logos/48/…,
+# générés depuis les 128 px par ``py -m scripts.resize_logos``.
+SMALL_LOGO_PX = 48
 
 
 def _luminance(hex_color: str) -> float | None:
@@ -61,8 +67,11 @@ def dot_color(primary: str | None, secondary: str | None, background: str) -> st
     return secondary if cs is not None and cs > cp else primary
 
 
-def logo_path(abbr: str, dark: bool = False) -> str | None:
-    """Chemin du logo relatif à la racine du site, s'il a été téléchargé.
-    ``dark`` : variante pour fond sombre (logos/dark/<ABBR>.png)."""
+def logo_path(abbr: str, dark: bool = False, small: bool = False) -> str | None:
+    """Chemin du logo relatif à la racine du site, s'il existe.
+    ``dark`` : variante pour fond sombre (logos/dark/<ABBR>.png).
+    ``small`` : version réduite (logos/48/…), générée par scripts.resize_logos."""
     rel = f"dark/{abbr}.png" if dark else f"{abbr}.png"
+    if small:
+        rel = f"{SMALL_LOGO_PX}/{rel}"
     return f"logos/{rel}" if (LOGO_DIR / rel).is_file() else None

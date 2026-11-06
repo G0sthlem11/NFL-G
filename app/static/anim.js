@@ -144,18 +144,18 @@
   }
 
   // --- Survol -----------------------------------------------------------
-  // Cartes de match : les pastilles grossissent à peine, les équipes glissent
+  // Cartes de match : les logos grossissent à peine, les équipes glissent
   // de 3 px. Motion ignore les survols émulés par le tactile.
   function hoverGames(view) {
     const games = view.querySelectorAll(".game");
     if (!games.length) return;
     const stop = M.hover(games, (el) => {
-      const pills = el.querySelectorAll(".pill");
+      const logos = el.querySelectorAll(".team-logo");
       const teams = el.querySelector(".game-teams");
-      M.animate(pills, { scale: 1.25 }, { duration: T.hover, ease: EASE });
+      M.animate(logos, { scale: 1.1 }, { duration: T.hover, ease: EASE });
       if (teams) M.animate(teams, { x: 3 }, { duration: T.hover, ease: EASE });
       return () => {
-        M.animate(pills, { scale: 1 }, { duration: T.hover, ease: EASE });
+        M.animate(logos, { scale: 1 }, { duration: T.hover, ease: EASE });
         if (teams) M.animate(teams, { x: 0 }, { duration: T.hover, ease: EASE });
       };
     });

@@ -43,3 +43,32 @@ def test_logo_path(tmp_path, monkeypatch):
     (tmp_path / "dark").mkdir()
     (tmp_path / "dark" / "KC.png").write_bytes(b"png")
     assert logo_path("KC", dark=True) == "logos/dark/KC.png"
+    assert logo_path("KC", small=True) is None
+    (tmp_path / "48" / "dark").mkdir(parents=True)
+    (tmp_path / "48" / "KC.png").write_bytes(b"png")
+    (tmp_path / "48" / "dark" / "KC.png").write_bytes(b"png")
+    assert logo_path("KC", small=True) == "logos/48/KC.png"
+    assert logo_path("KC", dark=True, small=True) == "logos/48/dark/KC.png"
+
+
+def _png_size(path):
+    """Largeur et hauteur d'un PNG, lues dans son en-tête IHDR (sans Pillow)."""
+    head = path.read_bytes()[:24]
+    assert head.startswith(b"\x89PNG"), path
+    return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+
+
+@pytest.mark.parametrize("sub", ["", "dark"])
+def test_small_logos_versioned_for_every_logo(sub):
+    """Chaque logo 128 px a sa version 48 px (py -m scripts.resize_logos), carrée,
+    et nettement plus légère."""
+    big_dir = ta.LOGO_DIR / sub if sub else ta.LOGO_DIR
+    small_dir = ta.LOGO_DIR / str(ta.SMALL_LOGO_PX) / sub if sub else ta.LOGO_DIR / str(ta.SMALL_LOGO_PX)
+    big = sorted(p.name for p in big_dir.glob("*.png"))
+    assert len(big) >= 32
+    assert sorted(p.name for p in small_dir.glob("*.png")) == big
+    for name in big:
+        assert _png_size(small_dir / name) == (ta.SMALL_LOGO_PX, ta.SMALL_LOGO_PX), name
+    total_big = sum((big_dir / n).stat().st_size for n in big)
+    total_small = sum((small_dir / n).stat().st_size for n in big)
+    assert total_small < total_big / 2

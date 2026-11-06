@@ -197,29 +197,41 @@ function teamColorStyle(t) {
   return ` style="--team:${esc(light)};--team-dark:${esc(dark)}"`;
 }
 
-// Logo local (logos/KC.png, variante logos/dark/KC.png en thème sombre),
-// en niveaux de gris ; couleurs d'origine au survol.
-function teamLogo(abbr) {
+// --- Logos d'équipe -----------------------------------------------------
+// Un seul composant pour toute l'app. Petits logos (48 px, logos/48/…) à côté
+// des abréviations, grands logos (128 px) pour l'en-tête d'un match. La
+// variante pour fond sombre (…/dark/…) est choisie par <picture> selon
+// prefers-color-scheme. width/height fixes : pas de saut de mise en page.
+// alt vide : le texte d'à côté nomme déjà l'équipe, il n'est lu qu'une fois.
+// Image introuvable : elle disparaît, le texte reste.
+function logoPicture(abbr, px, { lazy = true, cls = "team-logo" } = {}) {
   const t = state.teams.get(abbr);
-  if (!t?.logo) return "";
-  const dark = t.logo_dark ? `<source media="(prefers-color-scheme: dark)" srcset="${esc(t.logo_dark)}">` : "";
-  return `<picture class="sb-logo-wrap">${dark}<img class="sb-logo" src="${esc(t.logo)}" alt="${esc(t.name)}" width="88" height="88" decoding="async" onerror="this.closest('picture').remove()"></picture>`;
+  const small = px <= 48;
+  const src = (small && t?.logo_sm) || t?.logo;
+  if (!src) return "";
+  const darkSrc = (small && t.logo_sm_dark) || t.logo_dark;
+  const dark = darkSrc ? `<source media="(prefers-color-scheme: dark)" srcset="${esc(darkSrc)}">` : "";
+  return `<picture class="${cls}-wrap">${dark}<img class="${cls}" src="${esc(src)}" alt="" width="${px}" height="${px}"${lazy ? ' loading="lazy"' : ""} decoding="async" onerror="this.closest('picture').remove()"></picture>`;
 }
 
-function teamLine(abbr, score, outcome) {
-  const t = state.teams.get(abbr);
-  const color = teamColorStyle(t);
-  const name = t ? `<span class="full">${esc(t.name)}</span><span class="nick">${esc(t.nick || t.name)}</span>` : "";
+// Logo + abréviation, partout dans l'app (sauf l'en-tête d'un match, qui a
+// ses grands logos). Pas de nom en toutes lettres : il apparaît au survol.
+// size : 22 px dans les listes, 18 px dans les tableaux, 24 px dans les titres.
+// lazy : false pour ce qui est visible dès l'ouverture de la page.
+function teamBadge(abbr, { size = 22, lazy = true, cls = "", textCls = "" } = {}) {
+  const name = state.teams.get(abbr)?.name;
+  return `<span class="team-badge${cls ? ` ${cls}` : ""}"${name ? ` title="${esc(name)}"` : ""}>${logoPicture(abbr, size, { lazy })}<span class="tb-text${textCls ? ` ${textCls}` : ""}">${esc(abbr)}</span></span>`;
+}
+
+function teamLine(abbr, score, outcome, eager = false) {
   return `
     <div class="team-line ${outcome}">
-      <span class="pill"${color} aria-hidden="true"></span>
-      <span class="abbr">${esc(abbr)}</span>
-      <span class="team-name">${name}</span>
+      ${teamBadge(abbr, { size: 22, lazy: !eager, textCls: "abbr" })}
       <span class="score">${score === null || score === undefined ? "" : esc(score)}</span>
     </div>`;
 }
 
-function gameRow(g) {
+function gameRow(g, eager = false) {
   const kickoff = g.kickoff_paris ? new Date(g.kickoff_paris) : null;
   const time = kickoff ? fmtTime.format(kickoff) : "—";
   const final = g.status === "final";
@@ -239,8 +251,8 @@ function gameRow(g) {
     <a class="game ${final ? "is-final" : "is-scheduled"}" href="#/game/${esc(g.game_id)}" aria-label="${esc(label)}">
       <div class="game-status"><span class="time">${esc(time)}</span>${status}</div>
       <div class="game-teams">
-        ${teamLine(g.away_team, g.away_score, awayCls)}
-        ${teamLine(g.home_team, g.home_score, homeCls)}
+        ${teamLine(g.away_team, g.away_score, awayCls, eager)}
+        ${teamLine(g.home_team, g.home_score, homeCls, eager)}
       </div>
     </a>`;
 }
@@ -334,13 +346,14 @@ async function renderWeek(week) {
 
   const playing = new Set(games.flatMap((g) => [g.away_team, g.home_team]));
   const byes = [...state.teams.keys()].filter((t) => !playing.has(t)).sort();
+  let shown = 0; // les premiers matchs, visibles à l'ouverture, chargent leurs logos tout de suite
   const days = groupByDay(games).map((d) => `
     <section class="day">
       <h2 class="day-label">${esc(d.label)}</h2>
-      <div class="games">${d.games.map(gameRow).join("")}</div>
+      <div class="games">${d.games.map((g) => gameRow(g, shown++ < 5)).join("")}</div>
     </section>`).join("");
   const byesHtml = week <= 18 && byes.length
-    ? `<p class="byes"><span class="byes-label">Au repos</span>${byes.map((t) => `<span class="bye-team"><span class="pill"${teamColorStyle(state.teams.get(t))} aria-hidden="true"></span>${esc(t)}</span>`).join("")}</p>` : "";
+    ? `<p class="byes"><span class="byes-label">Au repos</span>${byes.map((t) => teamBadge(t, { size: 18, cls: "bye-team" })).join("")}</p>` : "";
 
   render(days + byesHtml);
 }
@@ -518,8 +531,7 @@ function keyCard(p, role, stats, extra = "", mvp = false) {
 // Sur mobile, une seule colonne dans le même ordre (catégorie par catégorie,
 // extérieur puis domicile) ; chaque cellule rappelle alors son équipe.
 function teamLabel(abbr, cls) {
-  const t = state.teams.get(abbr);
-  return `<span class="${cls}"><span class="pill"${teamColorStyle(t)} aria-hidden="true"></span>${esc(teamName(abbr))}</span>`;
+  return `<span class="${cls}">${teamBadge(abbr, { size: 24 })}</span>`;
 }
 
 function keyCell(team, cards, empty) {
@@ -586,7 +598,7 @@ function scoreboard(g) {
   // Équipe gagnante : sa couleur sert de fin liseré sous son abréviation.
   const team = (abbr, cls, align) => `
     <div class="sb-team ${cls} ${align}"${cls === "is-winner" ? teamColorStyle(state.teams.get(abbr)) : ""}>
-      ${teamLogo(abbr)}
+      ${logoPicture(abbr, 88, { lazy: false, cls: "sb-logo" })}
       <div class="sb-text">
         <span class="sb-abbr">${esc(abbr)}</span>
         <span class="sb-name">${esc(teamName(abbr))}</span>
@@ -634,15 +646,13 @@ async function renderGame(gameId) {
 const fmtPct = (v) => (v === null || v === undefined ? "—" : v.toFixed(3).replace(/^0(?=\.)/, ""));
 const fmtDiff = (v) => (v > 0 ? `+${v}` : v < 0 ? `−${-v}` : "0");
 
-function standingsTable(d) {
+// eager : tableaux visibles à l'ouverture (les deux premières divisions AFC).
+function standingsTable(d, eager = false) {
   const rows = d.rows.map((r, i) => {
-    const t = state.teams.get(r.team);
     return `
       <tr${i === 0 ? ' class="is-leader"' : ""}>
         <th scope="row" class="st-team"><span class="st-team-inner">
-          <span class="pill"${teamColorStyle(t)} aria-hidden="true"></span>
-          <span class="st-abbr">${esc(r.team)}</span>
-          <span class="st-name">${esc(r.name)}</span>
+          ${teamBadge(r.team, { size: 20, lazy: !eager, textCls: "st-abbr" })}
         </span></th>
         <td>${r.wins}</td><td>${r.losses}</td><td>${r.ties}</td>
         <td class="st-pct">${fmtPct(r.pct)}</td>
@@ -686,7 +696,7 @@ async function renderStandings() {
   const conf = (c) => `
     <section class="block conference">
       <h2 class="section-title">${c}</h2>
-      ${divisions.filter((d) => d.conference === c).map(standingsTable).join("")}
+      ${divisions.filter((d) => d.conference === c).map((d, i) => standingsTable(d, c === "AFC" && i < 2)).join("")}
     </section>`;
   paint(`
     <div class="page-head"><h1 class="page-title">Équipes</h1></div>
@@ -771,18 +781,6 @@ function statSortValue(c, l, games = null) {
   return games && (c.type === "count" || c.type === "made") ? v / games : v;
 }
 
-// Petit logo d'équipe (tableaux), abréviation en texte alternatif et en
-// infobulle ; l'abréviation seule si le logo manque.
-function smallLogo(abbr, px = 22) {
-  const t = state.teams.get(abbr);
-  if (!t?.logo) return `<span class="abbr-fallback">${esc(abbr)}</span>`;
-  const dark = t.logo_dark ? `<source media="(prefers-color-scheme: dark)" srcset="${esc(t.logo_dark)}">` : "";
-  return `<picture class="mini-logo-wrap">${dark}<img class="mini-logo" src="${esc(t.logo)}" alt="${esc(abbr)}" title="${esc(abbr)}" width="${px}" height="${px}" loading="lazy" decoding="async" onerror="logoFallback(this)"></picture>`;
-}
-
-function logoFallback(img) {
-  img.closest("picture").outerHTML = `<span class="abbr-fallback">${esc(img.alt)}</span>`;
-}
 
 // En-têtes à deux niveaux : groupes (« Passe », « Course ») puis colonnes.
 // Un seul groupe : pas de ligne de groupe. lead : colonnes avant les stats.
@@ -861,7 +859,7 @@ async function renderPlayer(playerId) {
 
   const cats = categoryOrder(p.position).filter((c) => CATEGORIES[c].has(p.totals));
   const logCats = cats.slice(0, 2); // le journal de matchs garde les deux catégories principales
-  const teams = p.teams.map((t) => esc(teamName(t))).join(", ");
+  const teams = playerTeams(p);
 
   const totals = cats.map((c) => `
     <div class="totals-group">
@@ -877,7 +875,7 @@ async function renderPlayer(playerId) {
     return `
       <tr>
         <th scope="row"><a href="#/game/${esc(g.game_id)}">${esc(g.week_label.replace("Week ", "S"))}</a></th>
-        <td class="gl-opp">${g.home ? "vs" : "@"} ${esc(g.opponent)}</td>
+        <td class="gl-opp"><span class="gl-ha" title="${g.home ? "À domicile" : "À l'extérieur"}">${g.home ? "vs" : "@"}</span>${teamBadge(g.opponent, { size: 18 })}</td>
         <td class="gl-res is-${g.result || "none"}">${res}</td>
         ${cells}
       </tr>`;
@@ -910,8 +908,13 @@ async function renderPlayer(playerId) {
     </section>`);
 }
 
+// Équipes du joueur (plusieurs s'il a été échangé) : logo et abréviation.
+function playerTeams(p) {
+  return p.teams.map((t) => teamBadge(t, { size: 20, lazy: false })).join(", ");
+}
+
 function playerHeader(p) {
-  const teams = p.teams.map((t) => esc(teamName(t))).join(", ");
+  const teams = playerTeams(p);
   return `
     <button type="button" class="back link-plain" onclick="history.length > 1 ? history.back() : (location.hash = '#/')">← Retour</button>
     <header class="player-head">
@@ -944,7 +947,7 @@ function playerPage(p, kind) {
     return `
       <tr>
         <th scope="row"><a href="#/game/${esc(g.game_id)}">${esc(g.week_label.replace("Week ", "S"))}</a></th>
-        <td class="gl-opp"><span class="gl-ha" title="${g.home ? "À domicile" : "À l'extérieur"}">${g.home ? "vs" : "@"}</span>${smallLogo(g.opponent)}</td>
+        <td class="gl-opp"><span class="gl-ha" title="${g.home ? "À domicile" : "À l'extérieur"}">${g.home ? "vs" : "@"}</span>${teamBadge(g.opponent, { size: 18 })}</td>
         <td class="gl-res is-${g.result || "none"}"${label ? ` title="${label}"` : ""}>${res}</td>
         ${cells}
       </tr>`;
@@ -1029,7 +1032,7 @@ function rkTable(pos, minGames) {
     return `<th scope="col"${cls ? ` class="${cls}"` : ""}${aria}><button type="button" class="rk-sort" data-sort="${k}" title="${esc(title)}">${label}</button></th>`;
   };
   const { grp, cols } = groupedHead(groups, 5, (c, start, k) => th(k, esc(c.k), c.title, start ? "grp-start" : ""));
-  const rows = rkRanked(pos).map((r) => {
+  const rows = rkRanked(pos).map((r, i) => {
     const g = avg ? r.games : null;
     const cells = groups.flatMap((gr, gi) => gr.cols.map((c, i) =>
       `<td${i === 0 && (groups.length > 1 || gi > 0) ? ' class="grp-start"' : ""}>${statText(c, r.totals, g)}</td>`)).join("");
@@ -1039,7 +1042,7 @@ function rkTable(pos, minGames) {
         <td class="rk-rank">${r.rk}</td>
         <td class="rk-photo">${headshot(r)}</td>
         <th scope="row" class="rk-name"><a class="player-link" href="#/player/${encodeURIComponent(r.player_id)}">${esc(r.name)}</a></th>
-        <td class="rk-team">${smallLogo(r.team)}</td>
+        <td class="rk-team">${teamBadge(r.team, { size: 18, lazy: i >= 12 })}</td>
         <td>${r.games}</td>
         ${cells}
         <td class="rk-score">${nfAvg.format(rkScore(r))}</td>
