@@ -1,0 +1,55 @@
+# Correspondances manuelles : nom d'université nflverse -> identifiant ESPN.
+# Lu par py -m scripts.fetch_college_logos, avant la correspondance automatique.
+# Ne mettre ici que les cas ambigus ou mal orthographiés. false : pas de logo,
+# volontairement (le nom s'affiche seul).
+# Identifiants : https://site.api.espn.com/apis/site/v2/sports/football/college-football/teams?limit=1000
+
+[colleges]
+# Homonymes : le nom seul désigne plusieurs équipes ESPN, ou la mauvaise.
+"Miami" = "2390"                # Miami (Floride), Hurricanes
+"Miami (Ohio)" = "193"          # Miami (OH) RedHawks
+"USC" = "30"                    # Southern California Trojans
+"Texas" = "251"                 # Longhorns (pas Texas College)
+"Illinois" = "356"              # Fighting Illini (pas Illinois College)
+"Idaho" = "70"                  # Vandals (pas College of Idaho)
+"Troy" = "2653"                 # Troy Trojans (pas Troy Vikings)
+"Charlotte" = "2429"            # 49ers (pas Charlotte Saints)
+
+# Noms usuels différents chez ESPN.
+"Mississippi" = "145"           # Ole Miss
+"N.C. State" = "152"
+"Connecticut" = "41"            # UConn
+"UMass Amherst" = "113"
+"Louisiana-Lafayette" = "309"
+"Louisiana-Monroe" = "2433"     # UL Monroe
+"Southeastern Louisiana" = "2545"
+"Appalachian State" = "2026"
+"Southern Mississippi" = "2572"
+"Texas-El Paso" = "2638"        # UTEP
+"Texas-San Antonio" = "2636"    # UTSA
+"Texas State-San Marcos" = "326"
+"Hawaii" = "62"
+"Middle Tennessee State" = "2393"
+"Tennessee-Chattanooga" = "236"
+"Sam Houston State" = "2534"
+"Stephen F. Austin State" = "2617"
+"Southern Utah State" = "253"
+"Cal Poly (San Luis Obispo)" = "13"
+"Grambling State" = "2755"
+"Pittsburg State (KS)" = "90"
+"Albany State (GA)" = "2013"
+"NW Missouri State University" = "138"
+"Missouri-Rolla" = "2402"       # aujourd'hui Missouri S&T
+"Western State" = "2714"        # aujourd'hui Western Colorado
+"Indiana PA,  University of" = "2291"
+"Cortland State Of New York" = "2782"
+"St. John's (MN)" = "2600"
+
+# Sans équipe de football chez ESPN, ou hors NCAA : le nom s'affiche seul.
+"South Florida Community College" = false
+"Virginia Commonwealth Univ." = false
+"Canisius College" = false
+"Malone" = false
+"Manitoba (Canada)" = false
+"Queens University (Canada)" = false
+"York (Canada)" = false

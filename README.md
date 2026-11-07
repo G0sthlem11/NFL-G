@@ -6,7 +6,7 @@ Web app personnelle qui affiche les résultats des matchs NFL de la saison en co
 - son top 5 offensif (yards et TD) et son top 3 défensif (interceptions, sacks, passes défendues, QB hits, pressions, plaquages) ;
 - son kicker.
 
-L'app propose aussi un classement par division et une page par joueur.
+L'app propose aussi un classement par division, l'effectif de chaque équipe et une page par joueur.
 
 Les données viennent de [nflverse](https://github.com/nflverse), via le package Python [`nflreadpy`](https://pypi.org/project/nflreadpy/). **L'app ne fait pas de suivi en direct** : les matchs terminés apparaissent quelques heures après la fin de la rencontre, et les matchs à venir avec leur date et leur heure (heure de Paris).
 
@@ -60,7 +60,9 @@ La documentation interactive de l'API se trouve à l'adresse <http://127.0.0.1:8
 |---|---|---|
 | Semaine | `#/week/8` | Les matchs de la semaine, groupés par jour (heure de Paris), avec le score final ou l'heure du coup d'envoi. Sélecteur Week 1 à 18, puis playoffs. Les flèches ← et → du clavier changent de semaine. |
 | Match | `#/game/2026_08_CAR_GB` | Score final et par quart-temps, stade, météo si elle est connue, statistiques d'équipe comparées, cartes des joueurs clés. |
-| Équipes | `#/standings` | Classement AFC et NFC, une table par division. |
+| Équipes | `#/standings` | Classement AFC et NFC, une table par division. Chaque équipe mène à son effectif. |
+| Effectifs | `#/rosters` | Les 32 équipes par conférence et division (logo, nom, bilan). |
+| Effectif | `#/roster/HOU` | L'effectif d'une équipe par unité (Attaque, Défense, Équipes spéciales) puis par poste, dans l'ordre du depth chart, titulaires marqués d'un point orange. Numéro, poste, âge, taille, poids, université, draft. Colonnes alignées d'un poste à l'autre. Réserve et équipe d'entraînement dans une section repliée. Depuis la page Match, les logos de l'en-tête y mènent aussi. |
 | Joueurs | `#/rankings/WR` | Le titulaire de chaque équipe à chaque poste (QB, RB, WR, TE, EDGE, DT, LB, CB, S, K), classé de 1 à 32. Tri par colonne, total de la saison ou moyenne par match. |
 | Joueur | `#/player/00-0036264` | Totaux de la saison et ligne match par match, limités aux stats clés du poste (QB, offensif, défensif ; fiche complète pour les autres postes). |
 
@@ -96,15 +98,18 @@ L'export interroge l'app FastAPI elle-même, en mémoire et sans réseau. Chaque
 | `/api/meta` | `data/meta.json`, avec en plus `generated_at`, la date de génération |
 | `/api/teams` | `data/teams.json` |
 | `/api/standings` | `data/standings.json` |
+| `/api/rankings` | `data/rankings.json` |
+| `/api/rosters` | `data/rosters.json` |
+| `/api/rosters/{abbr}` | `data/rosters/{abbr}.json` (les 32 équipes) |
 | `/api/weeks/{n}` | `data/weeks/{n}.json` (playoffs inclus dès qu'ils sont au calendrier) |
 | `/api/games/{game_id}` | `data/games/{game_id}.json` (matchs à venir inclus) |
 | `/api/players/{player_id}` | `data/players/{player_id}.json` |
 
 Le front (`app/static/`) est copié à la racine de `dist/`, en mode statique.
 
-Repères pour la saison 2026 à la Week 8 :
-- environ 2 000 fichiers, pour 9,4 Mo ;
-- environ 70 s de génération.
+Repères pour la saison 2026 à la Week 9 :
+- environ 2 200 fichiers, pour 12,9 Mo, dont 1,2 Mo pour les 33 fichiers d'effectifs ;
+- environ 15 s de génération quand le cache est déjà là, plus le téléchargement avec `--refresh`.
 
 Pour tester le site statique en local, **sans FastAPI** :
 
@@ -126,6 +131,7 @@ py -m pytest
 | `tests/test_rankings.py` | Classements par poste : sources de position, titulaire aux snaps, joueur échangé, moyenne par match et minimum de matchs, kicker. |
 | `tests/test_team_assets.py` | Couleurs d'équipe (contraste), chemins des logos, et version 48 px de chaque logo. |
 | `tests/test_standings.py` | Calcul du classement. |
+| `tests/test_rosters.py` | Effectifs : dernière photo par équipe, blessés retirés du depth chart, ordre des postes et des joueurs, tri par numéro sans depth chart, statuts écartés ou repliés. Logos des universités : correspondance des noms, homonymes, fichiers présents, choix de la variante sombre. |
 | `tests/test_data_layer.py` | Cache et normalisation. |
 | `tests/test_api.py` | API de bout en bout, sur une mini-saison fictive sans accès réseau. |
 
@@ -311,6 +317,39 @@ Réglages : section `[rankings]` de [`app/data/key_players.toml`](app/data/key_p
 - **Titulaire** : dans chaque équipe, le joueur du poste qui a le plus de snaps sur la saison (`load_snap_counts`, offensifs ou défensifs selon le poste) ; pour le kicker, le plus de matchs joués. Un joueur échangé compte pour l'équipe où il a le plus joué (en 2026, Jeffery Simmons compte pour TEN, pas pour CHI).
 - **Score** : celui de la catégorie (score QB, offensif, défensif ou barème kicker du MVP), additionné sur toute la saison, puis divisé par les matchs joués. Sous `min_games` matchs (4), le joueur est grisé en fin de classement.
 
+## Comment sont faits les effectifs
+
+Logique : `app/data/rosters.py`. Deux jeux de données nflverse, en cache comme les autres :
+- **`load_rosters_weekly`** : on garde la **dernière semaine de chaque équipe**, et pas la dernière semaine globale. Une équipe au repos n'a pas de ligne cette semaine-là : en Week 9, elle reste sur sa photo de Week 8.
+- **`load_depth_charts`** (ESPN) : seulement la dernière photo de chaque équipe, mise à jour deux fois par jour. Elle est souvent plus fraîche que le roster.
+
+Les deux sont facultatifs. Sans depth chart, l'effectif est rangé par numéro.
+
+Règles d'affichage :
+- **Effectif principal** : les statuts `ACT` et `INA`.
+  - `INA` est un inactif du jour du match, marqué « inactif ».
+  - Un joueur de l'équipe d'entraînement appelé pour le match (`ACT`, code `P…`) est marqué « appelé ».
+- **Section repliée « Hors effectif actif »** :
+  - **Réserve** : `RES`, `EXE`, `SUS`. Libellés : IR (`R01`), IR avec retour désigné (`R48`), PUP (`R04`), NFI (`R05`), « réserve » pour les autres codes.
+  - **Équipe d'entraînement** : `DEV`.
+- **Écartés** : les joueurs libérés (`CUT`) et retraités (`RET`).
+- **Depth chart** : ESPN y laisse les blessés. On ne garde que les joueurs de l'effectif principal, puis on recalcule le rang dans chaque case. Un titulaire blessé laisse ainsi sa place au suivant.
+  - Les rôles de retour et de holder (KR, PR, H) sont ignorés.
+  - Un joueur listé à plusieurs postes prend sa meilleure case : le rang le plus bas, puis l'ordre du depth chart.
+  - Le **titulaire** est le rang 1 de sa case.
+- **Ordre** :
+  1. l'unité ;
+  2. le groupe de postes (QB, RB, WR, TE, ligne offensive ; ligne défensive, linebackers, cornerbacks, safeties ; K, P, LS) ;
+  3. le rang, puis l'ordre des cases. Les titulaires viennent donc d'abord, dans l'ordre du depth chart (LT, LG, C, RG, RT) ;
+  4. le numéro, pour les joueurs absents du depth chart, rangés d'après leur poste nflverse.
+- **Affichage** :
+  - taille et poids en métrique, avec les valeurs américaines au survol ;
+  - âge calculé au jour de la consultation ;
+  - université la plus récente (la première de la liste nflverse), toutes au survol, avec son logo quand il existe (voir « Couleurs et logos ») ;
+  - draft sous la forme « 2018, 7e choix » : l'année (`entry_year`) et le rang du choix au total (`draft_number`), ou « Non drafté » ;
+  - une seule grille de colonnes pour tous les postes de la page (largeurs fixes partagées, `table-layout: fixed`).
+- **Liens** : un joueur mène à sa page `#/player/<id>` seulement s'il a au moins une stat cette saison (environ 88 % de l'effectif principal, peu de joueurs de l'équipe d'entraînement).
+
 ## Architecture
 
 ```
@@ -326,13 +365,17 @@ app/
     key_players.py   joueurs clés d'un match (QB, tops offensif et défensif, kickers)
     key_players.toml pondérations des joueurs clés
     rankings.py      classements par poste (titulaire de chaque équipe)
+    rosters.py       effectifs : dernières photos du roster et du depth chart, tri et regroupement
+    college_logos.toml  correspondances manuelles université nflverse -> équipe ESPN
+    college_logos.json  université -> fichiers de logo (généré par scripts.fetch_college_logos)
     standings.py     classement
     team_assets.py   couleurs d'équipe (contraste) et chemins des logos (128 et 48 px)
     repository.py    accès aux données normalisées
   static/            front HTML/CSS/JS vanilla (routage par #)
     anim.js          animations discrètes (fondus, cascade, compteurs), coupées si prefers-reduced-motion
     vendor/motion.js Motion 14.4.0 (https://motion.dev, MIT), copie locale
-    logos/           logos des équipes (128 px), logos/dark/ pour le thème sombre, logos/48/ en petit
+    logos/           logos des équipes (128 px), logos/dark/ pour le thème sombre, logos/48/ en petit,
+                     logos/college/ pour les universités (48 px)
 scripts/             exploration des données et contrôles
 tests/               pytest et jeux d'exemple (fixtures/)
 vercel.json          configuration Vercel (sert dist/, en-têtes de cache)
@@ -352,11 +395,13 @@ Le front ne voit jamais les DataFrames bruts : il ne reçoit que les modèles Py
 | `GET /api/standings` | Le classement. |
 | `GET /api/rankings` | Les classements par poste. |
 | `GET /api/players/{player_id}` | La saison d'un joueur. |
+| `GET /api/rosters` | Les 32 équipes, avec bilan et taille de l'effectif. |
+| `GET /api/rosters/{abbr}` | L'effectif d'une équipe (ex. `HOU`), groupé par unité et par poste. |
 | `POST /api/refresh` | Forcer l'actualisation. |
 
 ## Source et limites
 
-- **Source** : nflverse publie ses jeux de données sur GitHub. On utilise le calendrier et les résultats, les stats par joueur et par équipe, les stats avancées défensives de PFR (pressions), la table des joueurs (correspondance des identifiants PFR et nflverse, positions), les snaps par match (PFR), les équipes et le play-by-play.
+- **Source** : nflverse publie ses jeux de données sur GitHub. On utilise le calendrier et les résultats, les stats par joueur et par équipe, les stats avancées défensives de PFR (pressions), la table des joueurs (correspondance des identifiants PFR et nflverse, positions), les snaps par match (PFR), les équipes, le play-by-play, les rosters hebdomadaires et les depth charts (ESPN).
 - **Pas de direct** : nflverse met à jour ses données **quelques heures après les matchs**. Un match qui vient de se terminer peut donc encore apparaître « À venir », ou sans statistiques.
 - **Météo** : elle n'est renseignée que pour une partie des matchs en extérieur, et quasiment jamais sous dôme. Elle s'affiche seulement quand elle existe.
 - **Statistiques des joueurs** : `player_stats` ne contient que les joueurs ayant au moins une stat dans le match. Un titulaire présent sur le terrain mais sans aucune stat est donc traité comme un remplacé, avec la mention « actif sans stat ».
@@ -368,6 +413,14 @@ Le front ne voit jamais les DataFrames bruts : il ne reçoit que les modèles Py
   - **Tailles** : 22 px dans les listes, 20 px dans le classement, 18 px dans les tableaux, 24 px dans les titres. Les grands logos de l'en-tête d'un match font 88 px (64 px sur mobile).
   - **Fichiers** : les logos (ESPN, via `team_logo_espn`) sont copiés dans `app/static/logos/` en 128 px, avec la variante ESPN pour fond sombre dans `logos/dark/`. Le thème sombre bascule tout seul sur cette variante (`<picture>` et `prefers-color-scheme`). Exception : la variante sombre ESPN des Rams (LA, ainsi que ses anciennes abréviations LAR et STL) et des Jets (NYJ) est une silhouette toute blanche, qui détonne à côté des autres logos. Ces équipes gardent leur logo couleur dans les deux thèmes (`COLOR_LOGO_IN_DARK` dans `app/data/team_assets.py`). `py -m scripts.resize_logos` signale toute nouvelle variante sombre sans couleur. Pour les retélécharger : `py -m scripts.fetch_logos`.
   - **Petits logos** : les grands logos de 128 px servent à l'en-tête d'un match ; partout ailleurs, on utilise des versions de 48 px (`logos/48/` et `logos/48/dark/`), qui suffisent pour un écran haute densité. Avec une palette de 256 couleurs, les 72 fichiers passent de 494 Ko à 119 Ko (76 % de moins, environ 1,6 Ko par logo). Le script équilibre aussi le poids visuel. Il recadre chaque logo sur sa partie visible, puis réduit les logos massifs (TEN, PIT, CHI…) jusqu'à la surface couverte médiane, sans descendre sous 75 % de leur taille. Les logos fins (NYJ, LAC) gardent toute la place de leur boîte. L'écart de surface entre logos passe d'environ 5,6× à environ 3×. Pour les régénérer après `fetch_logos` : `py -m scripts.resize_logos`. Ce script exige Pillow (`py -m pip install pillow`), dont ni l'app ni l'Action n'ont besoin, puisque les fichiers sont versionnés.
-  - **Chargement et accessibilité** : `width` et `height` fixes (pas de saut de mise en page), et `loading="lazy"` hors de l'écran initial. L'`alt` est vide, car l'abréviation, juste à côté, est lue une seule fois. Si un logo ne charge pas, il disparaît et l'abréviation reste.
+  - **Logos des universités** (onglet Effectifs) : logos ESPN des équipes universitaires, la même famille que les logos NFL. La liste vient de l'API publique d'ESPN (`site.api.espn.com/…/college-football/teams`, sans clé) et les images de son CDN, en 48 px. Ils sont rangés dans `app/static/logos/college/<id ESPN>.png`, avec une version sombre dans `logos/college/dark/` quand c'est utile.
+    - **Correspondance des noms** : le nom nflverse normalisé (minuscules, sans accents ni ponctuation, sans « University ») est comparé aux noms ESPN. Un nom qui désigne plusieurs équipes n'est jamais choisi tout seul. Les cas ambigus ou mal orthographiés (Miami et Miami (Ohio), USC, Texas, N.C. State, Mississippi = Ole Miss, anciens noms…) sont dans [`app/data/college_logos.toml`](app/data/college_logos.toml), avec `false` pour une université volontairement sans logo. Le résultat est écrit dans `app/data/college_logos.json`, que l'app lit.
+    - **Recadrage** : chaque logo est téléchargé en 128 px puis traité comme les petits logos NFL (`fit_square` de `scripts/resize_logos.py`). Il est recadré sur sa partie visible, car les marges transparentes d'ESPN varient beaucoup d'une université à l'autre, puis son poids visuel est équilibré et il est centré dans un carré de 48 px.
+    - **Thème sombre** : le script mesure la part de chaque logo qui contraste avec le fond sombre. Il garde la variante ESPN « 500-dark » si elle est en couleur et lisible, sinon le logo clair s'il est lisible, sinon la plus lisible entre la variante sombre (parfois une silhouette blanche) et le logo ESPN « pour fond noir ».
+    - **Couverture** (saison 2026, Week 9) : 2 508 joueurs sur 2 520 (99,5 %), 236 universités sur 246. Sans logo : 7 universités sans équipe de football chez ESPN ou hors NCAA (Canada notamment), et 3 équipes ESPN sans image (Culver-Stockton, British Columbia, Friends). Le nom s'affiche alors à côté d'une boîte vide de la même taille, pour rester aligné avec les autres lignes.
+    - **Poids** : 351 fichiers, environ 580 Ko.
+    - **Commande** : `py -m scripts.fetch_college_logos` (Pillow requis) retélécharge tout et affiche la couverture et la liste des universités sans logo. `--dry-run` montre seulement la correspondance, sans rien télécharger. À relancer quand de nouvelles universités apparaissent dans les effectifs.
+  - **Boîte commune** : tous les logos du site (équipes et universités) passent par le même composant, `logoImg` dans `app.js`. Chaque logo est placé dans une boîte carrée de taille fixe (`.logo-box`, taille donnée par `--logo`) et centré dedans avec `object-fit: contain`. La boîte est centrée verticalement sur le texte, avec un écart fixe : le texte commence toujours à la même position, quelle que soit la forme du logo. Si un logo manque ou ne charge pas, la boîte reste, vide, et le texte reste aligné.
+  - **Chargement et accessibilité** : `width` et `height` fixes (pas de saut de mise en page), et `loading="lazy"` hors de l'écran initial. L'`alt` est vide, car l'abréviation ou le nom, juste à côté, est lu une seule fois.
 - **Photos des joueurs** : les photos des joueurs (`headshot_url`) sont chargées depuis le CDN de la NFL, qui les recadre sur le visage à 4 fois la taille affichée (l'original fait 3400 × 2450 px et 4 à 6 Mo). Sans photo, une silhouette neutre s'affiche.
 - **Python** : le projet a été développé et testé avec Python 3.13.

@@ -320,10 +320,22 @@ main:focus { outline: none; }
 /* Logo + abréviation (teamBadge dans app.js). Alignement : le badge prend la
    ligne de base de son texte, le logo est centré sur la hauteur de la ligne. */
 .team-badge { display: inline-flex; align-items: baseline; gap: 7px; min-width: 0; vertical-align: baseline; }
-/* Boîte carrée de taille fixe (width/height du <img>), logo centré dedans.
-   Les fichiers 48 px sont déjà normalisés en poids visuel (scripts/resize_logos.py). */
-.team-logo-wrap { display: flex; flex: 0 0 auto; align-self: center; }
-.team-logo { display: block; object-fit: contain; object-position: center; }
+/* Tous les logos (équipes, universités) : boîte carrée de taille fixe
+   (--logo, posée par logoImg dans app.js), logo centré dedans. La boîte reste
+   même vide (pas de logo, image introuvable) : les textes restent alignés.
+   Les petits fichiers sont déjà recadrés et équilibrés en poids visuel
+   (scripts/resize_logos.py, scripts/fetch_college_logos.py). */
+.logo-box {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  width: var(--logo, 22px);
+  height: var(--logo, 22px);
+}
+.logo-box picture { display: block; width: 100%; height: 100%; }
+.logo-box img { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center; }
 .tb-text { white-space: nowrap; }
 
 /* Logo + abréviation dans une colonne fixe, puis le score dans une colonne
@@ -397,13 +409,7 @@ main:focus { outline: none; }
 .sb-text { display: flex; flex-direction: column; min-width: 0; }
 
 /* Logos en couleur, taille fixe (pas de décalage au chargement de l'image). */
-.sb-logo-wrap { display: contents; }
-.sb-logo {
-  flex: 0 0 auto;
-  width: 88px;
-  height: 88px;
-  object-fit: contain;
-}
+/* Taille de la boîte : --logo (88 px), 64 px sur mobile. */
 
 /* Gagnant : fin liseré à la couleur de l'équipe, sous l'abréviation. */
 .sb-team.is-winner .sb-abbr {
@@ -440,7 +446,7 @@ main:focus { outline: none; }
   .scoreboard { column-gap: 8px; }
   .sb-team { flex-direction: column; align-items: flex-start; gap: 8px; }
   .sb-team.right { flex-direction: column; align-items: flex-end; }
-  .sb-logo { width: 64px; height: 64px; }
+  .sb-logo-wrap { width: 64px; height: 64px; }
   .sb-abbr { font-size: 26px; }
   .sb-score { font-size: 44px; }
   .sb-sep { font-size: 20px; }
@@ -754,3 +760,132 @@ td { text-align: right; }
 
 .colophon .logout { margin-left: 4px; color: var(--muted); }
 .colophon .logout:hover { color: var(--ink); }
+
+/* --- Liens vers les effectifs ----------------------------------------- */
+a.sb-team { color: inherit; text-decoration: none; }
+a.sb-team:hover .sb-name { color: var(--ink); }
+a.st-team-inner { color: inherit; text-decoration: none; }
+a.st-team-inner:hover .st-abbr { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+
+/* --- Effectifs : accueil ---------------------------------------------- */
+.rt-divisions { display: grid; grid-template-columns: 1fr; gap: var(--space-5) 48px; margin-top: var(--space-4); }
+@media (min-width: 640px) { .rt-divisions { grid-template-columns: 1fr 1fr; } }
+.rt-division-name {
+  margin: 0;
+  padding-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.rt-teams { list-style: none; margin: 0; padding: 0; }
+.rt-teams li { border-bottom: 1px solid var(--rule); }
+.rt-team { display: flex; align-items: center; gap: var(--space-3); padding: 9px 0; color: var(--ink); text-decoration: none; }
+.rt-team-name { flex: 1 1 auto; min-width: 0; font-family: var(--font-display); font-size: 18px; font-weight: 400; }
+.rt-team:hover .rt-team-name { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.rt-team-rec { color: var(--muted); font-size: 15px; font-variant-numeric: tabular-nums lining-nums; }
+
+/* --- Effectifs : page d'une équipe ------------------------------------ */
+.rt-head { display: flex; align-items: center; gap: 22px; margin-top: 24px; }
+.rt-title { font-size: clamp(34px, 8vw, 56px); }
+.rt-legend { display: flex; align-items: center; gap: 8px; margin: 28px 0 0; font-size: 13px; color: var(--muted); }
+.rt-unit { margin-top: 48px; }
+.rt-count { font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); font-size: 13px; margin-left: 4px; }
+
+/* Même grille pour tous les tableaux de la page (QB, RB, WR…) : largeurs
+   fixes par colonne, le nom prend le reste. */
+.roster { width: 100%; margin-top: 24px; font-size: 15px; table-layout: fixed; }
+.rt-c-num { width: 3em; }
+.rt-c-photo { width: 48px; }
+.rt-c-pos { width: 4.2em; }
+.rt-c-age { width: 3.4em; }
+.rt-c-size { width: 4.8em; }
+.rt-c-college { width: 11.5em; }
+.rt-c-draft { width: 8.6em; }
+.roster caption {
+  caption-side: top;
+  text-align: left;
+  padding-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.roster thead th {
+  padding: 0 0 6px 12px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--rule-strong);
+}
+.roster td, .roster tbody th { padding: 5px 0 5px 12px; color: var(--ink-2); text-align: right; white-space: nowrap; }
+.roster tbody tr { border-bottom: 1px solid var(--rule); }
+.roster tr > :first-child { padding-left: 0; }
+.roster .rt-num { text-align: right; color: var(--muted); }
+.roster .rt-photo { padding-right: 0; text-align: left; }
+.roster .rt-photo .headshot { display: block; }
+.roster .rt-name, .roster .rt-pos, .roster .rt-text { text-align: left; }
+.roster .rt-name { font-weight: 400; }
+.roster tbody .rt-name { color: var(--ink); white-space: normal; }
+.roster .rt-college { overflow: hidden; text-overflow: ellipsis; }
+.rt-name-line { display: inline-flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; }
+.roster tr.is-starter .rt-name { font-weight: 600; }
+.roster tr.is-starter .rt-pos { color: var(--ink); }
+.rt-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  align-self: center;
+}
+.rt-num .rt-dot { margin-right: 6px; vertical-align: 2px; }
+.rt-legend .rt-dot { align-self: auto; }
+.rt-tag { font-size: 12px; font-weight: 400; font-style: italic; color: var(--muted); }
+.rt-muted { color: var(--muted); }
+.rt-meta { display: none; }
+
+/* Section repliée : réserve et équipe d'entraînement. */
+.rt-out summary { display: flex; align-items: baseline; gap: 10px; cursor: pointer; list-style: none; }
+.rt-out summary::-webkit-details-marker { display: none; }
+.rt-out summary::before { content: "+"; width: 1em; font-family: var(--font-display); font-size: 24px; color: var(--muted); }
+.rt-out[open] summary::before { content: "−"; }
+.rt-out summary .section-title { margin: 0; }
+.rt-out summary:hover .section-title { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+
+/* Mobile : une liste sur deux lignes (numéro, nom, poste ; puis les détails),
+   sans défilement horizontal. */
+@media (max-width: 800px) {
+  .roster .rt-opt { display: none; }
+  .rt-c-num { width: 2.6em; }
+  .rt-c-photo { width: 46px; }
+  .rt-c-pos { width: 3.6em; }
+  .rt-meta { display: block; margin-top: 1px; font-size: 13px; font-weight: 400; color: var(--muted); line-height: 1.35; }
+  .roster tr.is-starter .rt-meta { font-weight: 400; }
+  .roster td, .roster tbody th { padding-left: 10px; vertical-align: top; }
+  .roster .rt-num, .roster .rt-pos { padding-top: 7px; }
+  .roster .rt-pos { text-align: right; }
+  .roster thead { display: none; }
+  .rt-head { gap: 14px; }
+  .rt-head .sb-logo-wrap { width: 64px; height: 64px; }
+}
+@media (max-width: 800px) {
+  .rt-out summary { flex-wrap: wrap; }
+  .rt-out summary .section-title { font-size: 24px; }
+}
+
+/* Logos des universités : même principe que .team-badge (taille fixe). */
+.college-badge { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; vertical-align: bottom; }
+.college-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rt-meta .college-badge { gap: 4px; vertical-align: -2px; }
+.rt-meta .college-name { white-space: normal; }
+.rt-meta-college { display: block; }
+.rt-meta-college { height: 18px; line-height: 18px; overflow: hidden; }
+.rt-meta-college .college-badge { display: flex; height: 18px; vertical-align: top; }
+.rt-meta-college .college-name { white-space: nowrap; }

@@ -22,7 +22,7 @@ from typing import Callable
 import nflreadpy as nfl
 import polars as pl
 
-from . import derive
+from . import derive, rosters
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ STABLE_DATASETS = ("prev_player_stats", "prev_pfr_def")
 
 DATASETS = ("schedules", "teams", "player_stats", "team_stats", "pfr_def",
             "quarter_scores", "first_downs", "prev_player_stats", "prev_pfr_def",
-            "snap_counts", "players")
+            "snap_counts", "players", "rosters", "depth_charts")
 
 TEAM_COLUMNS = ["team_abbr", "team_name", "team_nick", "team_conf", "team_division",
                 "team_color", "team_color2"]
@@ -95,6 +95,27 @@ def _snap_counts(season: int) -> pl.DataFrame:
     return df.select([c for c in SNAP_COLUMNS if c in df.columns])
 
 
+def _rosters(season: int) -> pl.DataFrame:
+    """Dernier roster de chaque équipe (onglet Effectifs), ou table vide."""
+    try:
+        df = nfl.load_rosters_weekly([season])
+    except Exception:  # noqa: BLE001 — donnée d'appoint, ne doit pas bloquer
+        log.warning("Rosters %s indisponibles : onglet Effectifs vide", season, exc_info=True)
+        return pl.DataFrame()
+    return rosters.latest_rosters(df)
+
+
+def _depth_charts(season: int) -> pl.DataFrame:
+    """Dernière photo du depth chart de chaque équipe, ou table vide (les
+    effectifs sont alors rangés par numéro)."""
+    try:
+        df = nfl.load_depth_charts([season])
+    except Exception:  # noqa: BLE001 — donnée d'appoint, ne doit pas bloquer
+        log.warning("Depth charts %s indisponibles : effectifs rangés par numéro", season, exc_info=True)
+        return pl.DataFrame()
+    return rosters.latest_depth_charts(df)
+
+
 def _pfr_pressures(season: int, ids: pl.DataFrame | None) -> pl.DataFrame:
     """Pressions PFR de la saison. Facultatif : en cas d'échec (données pas
     encore publiées, réseau…), table vide et les scores défensifs se font sans."""
@@ -148,6 +169,8 @@ def _download(season: int, keep: dict[str, pl.DataFrame] | None = None) -> dict[
         "prev_pfr_def": keep["prev_pfr_def"] if "prev_pfr_def" in keep else _pfr_pressures(season - 1, ids),
         "snap_counts": _snap_counts(season),
         "players": players,
+        "rosters": _rosters(season),
+        "depth_charts": _depth_charts(season),
     }
 
 

@@ -56,6 +56,15 @@ test("données sans cookie : 401 JSON, jamais le contenu", async () => {
   assert.equal((await r.json()).detail, "Connexion requise");
 });
 
+test("effectifs sans cookie : 401 aussi (aucune exception pour les nouvelles routes)", async () => {
+  for (const path of ["/data/rosters.json", "/data/rosters/HOU.json"]) {
+    const r = await get(path);
+    assert.equal(r.status, 401, path);
+  }
+  const token = await signSession(SECRET);
+  assert.equal(await get("/data/rosters/HOU.json", token), undefined);
+});
+
 test("cookie valide : la requête continue", async () => {
   const token = await signSession(SECRET);
   assert.equal(await get("/", token), undefined);

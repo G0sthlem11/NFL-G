@@ -201,17 +201,31 @@ function teamColorStyle(t) {
 // Un seul composant pour toute l'app. Petits logos (48 px, logos/48/…) à côté
 // des abréviations, grands logos (128 px) pour l'en-tête d'un match. La
 // variante pour fond sombre (…/dark/…) est choisie par <picture> selon
-// prefers-color-scheme. width/height fixes : pas de saut de mise en page.
+// prefers-color-scheme.
+// Chaque logo est dans une boîte carrée de taille fixe (.logo-box, --logo),
+// centré dedans (object-fit: contain) : le texte d'à côté commence toujours au
+// même endroit, quelle que soit la forme du logo. Sans logo, ou si l'image ne
+// charge pas, la boîte reste, vide : les textes restent alignés.
 // alt vide : le texte d'à côté nomme déjà l'équipe, il n'est lu qu'une fois.
-// Image introuvable : elle disparaît, le texte reste.
-function logoPicture(abbr, px, { lazy = true, cls = "team-logo" } = {}) {
+function logoImg(src, darkSrc, px, { lazy = true, cls = "team-logo" } = {}) {
+  const box = (inner) => `<span class="logo-box ${cls}-wrap${inner ? "" : " is-empty"}" style="--logo:${px}px"${inner ? "" : ' aria-hidden="true"'}>${inner}</span>`;
+  if (!src) return box("");
+  const dark = darkSrc ? `<source media="(prefers-color-scheme: dark)" srcset="${esc(darkSrc)}">` : "";
+  return box(`<picture>${dark}<img class="${cls}" src="${esc(src)}" alt="" width="${px}" height="${px}"${lazy ? ' loading="lazy"' : ""} decoding="async" onerror="this.style.visibility='hidden'"></picture>`);
+}
+
+function logoPicture(abbr, px, opts = {}) {
   const t = state.teams.get(abbr);
   const small = px <= 48;
   const src = (small && t?.logo_sm) || t?.logo;
-  if (!src) return "";
-  const darkSrc = (small && t.logo_sm_dark) || t.logo_dark;
-  const dark = darkSrc ? `<source media="(prefers-color-scheme: dark)" srcset="${esc(darkSrc)}">` : "";
-  return `<picture class="${cls}-wrap">${dark}<img class="${cls}" src="${esc(src)}" alt="" width="${px}" height="${px}"${lazy ? ' loading="lazy"' : ""} decoding="async" onerror="this.closest('picture').remove()"></picture>`;
+  return logoImg(src, src && ((small && t.logo_sm_dark) || t.logo_dark), px, opts);
+}
+
+// Université avec son logo (ESPN, logos/college/), mêmes règles que les logos
+// d'équipe. Sans logo : une boîte vide de la même taille, le nom reste aligné.
+function collegeBadge(p, size) {
+  const logo = logoImg(p.college_logo, p.college_logo_dark, size, { cls: "college-logo" });
+  return `<span class="college-badge">${logo}<span class="college-name">${esc(p.college)}</span></span>`;
 }
 
 // Logo + abréviation, partout dans l'app (sauf l'en-tête d'un match, qui a
@@ -598,13 +612,13 @@ function scoreboard(g) {
   }
   // Équipe gagnante : sa couleur sert de fin liseré sous son abréviation.
   const team = (abbr, cls, align) => `
-    <div class="sb-team ${cls} ${align}"${cls === "is-winner" ? teamColorStyle(state.teams.get(abbr)) : ""}>
+    <a class="sb-team ${cls} ${align}" href="${rosterHref(abbr)}" title="Effectif de ${esc(teamName(abbr))}"${cls === "is-winner" ? teamColorStyle(state.teams.get(abbr)) : ""}>
       ${logoPicture(abbr, 88, { lazy: false, cls: "sb-logo" })}
       <div class="sb-text">
         <span class="sb-abbr">${esc(abbr)}</span>
         <span class="sb-name">${esc(teamName(abbr))}</span>
       </div>
-    </div>`;
+    </a>`;
   return `
     <p class="eyebrow">${esc(g.week_label)} · ${esc(when)}</p>
     <div class="scoreboard ${final ? "" : "is-scheduled"}">
@@ -652,9 +666,9 @@ function standingsTable(d, eager = false) {
   const rows = d.rows.map((r, i) => {
     return `
       <tr${i === 0 ? ' class="is-leader"' : ""}>
-        <th scope="row" class="st-team"><span class="st-team-inner">
+        <th scope="row" class="st-team"><a class="st-team-inner" href="${rosterHref(r.team)}">
           ${teamBadge(r.team, { size: 20, lazy: !eager, textCls: "st-abbr" })}
-        </span></th>
+        </a></th>
         <td>${r.wins}</td><td>${r.losses}</td><td>${r.ties}</td>
         <td class="st-pct">${fmtPct(r.pct)}</td>
         <td class="opt">${r.points_for}</td><td class="opt">${r.points_against}</td>
@@ -1164,6 +1178,188 @@ view.addEventListener("click", (e) => {
   if (row && !e.target.closest("a")) location.hash = row.dataset.href;
 });
 
+// --- Effectifs (app/data/rosters.py) --------------------------------------
+const fmtRosterDate = new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const nf2 = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const rosterHref = (abbr) => `#/roster/${encodeURIComponent(abbr)}`;
+
+function record(t) {
+  if (t.wins === null || t.wins === undefined) return "";
+  return `${t.wins}-${t.losses}${t.ties ? `-${t.ties}` : ""}`;
+}
+
+function rosterStamp(d) {
+  const parts = [];
+  if (d.roster_week) parts.push(`Effectif : ${esc(weekLabel(d.roster_week))}`);
+  if (d.depth_chart_at) parts.push(`depth chart du ${esc(fmtRosterDate.format(new Date(d.depth_chart_at)))}`);
+  return parts.join(" · ");
+}
+
+// Âge au jour de la consultation (la date de naissance vient des données).
+function age(birth) {
+  if (!birth) return null;
+  const [y, m, d] = birth.split("-").map(Number);
+  const now = new Date();
+  let a = now.getFullYear() - y;
+  if (now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d)) a -= 1;
+  return a;
+}
+
+const height = (p) => (p.height_in ? `${nf2.format(p.height_in * 0.0254)} m` : null);
+const weight = (p) => (p.weight_lb ? `${Math.round(p.weight_lb * 0.45359237)} kg` : null);
+const usSize = (p) => [p.height_in ? `${Math.floor(p.height_in / 12)}′${p.height_in % 12}″` : "", p.weight_lb ? `${p.weight_lb} lb` : ""].filter(Boolean).join(" · ");
+// Draft : année et rang du choix au total (« 2018, 7e choix »).
+function draftText(p) {
+  if (p.draft_pick === null || p.draft_pick === undefined) return `<span class="rt-muted">Non drafté</span>`;
+  const pick = p.draft_pick === 1 ? "1er" : `${p.draft_pick}e`;
+  return `${p.draft_year ? `${p.draft_year}, ` : ""}${pick} choix`;
+}
+
+function rosterName(p) {
+  const name = p.has_page
+    ? `<a class="player-link" href="#/player/${encodeURIComponent(p.player_id)}">${esc(p.name)}</a>`
+    : esc(p.name);
+  const tag = p.status_label ? `<span class="rt-tag">${esc(p.status_label)}</span>` : "";
+  return `${name}${tag}`;
+}
+
+function rosterRow(p) {
+  const a = age(p.birth_date);
+  const college = p.college ? `<span${p.colleges.length > 1 ? ` title="${esc(p.colleges.join(", "))}"` : ""}>${collegeBadge(p, 18)}</span>` : "—";
+  // Sur mobile : sous le nom, l'âge, la taille et le poids, puis l'université.
+  const nb = (s) => (s ? s.replace(/ /g, " ") : s); // « 1 saison » ne se coupe pas
+  const meta = [nb(a !== null ? `${a} ans` : null), nb(height(p)), nb(weight(p))].filter(Boolean).join(" · ")
+    + (p.college ? `<span class="rt-meta-college">${collegeBadge(p, 14)}</span>` : "");
+  const us = usSize(p);
+  return `
+    <tr${p.starter ? ' class="is-starter"' : ""}>
+      <td class="rt-num">${p.starter ? `<span class="rt-dot" title="Titulaire au depth chart"></span>` : ""}${p.jersey ?? "—"}</td>
+      <td class="rt-photo">${headshot(p)}</td>
+      <th scope="row" class="rt-name">
+        <span class="rt-name-line">${rosterName(p)}</span>
+        <span class="rt-meta">${meta}</span>
+      </th>
+      <td class="rt-pos">${dash(p.position)}</td>
+      <td class="rt-opt">${a ?? "—"}</td>
+      <td class="rt-opt"${us ? ` title="${esc(us)}"` : ""}>${height(p) ?? "—"}</td>
+      <td class="rt-opt"${us ? ` title="${esc(us)}"` : ""}>${weight(p) ?? "—"}</td>
+      <td class="rt-opt rt-text rt-college">${college}</td>
+      <td class="rt-opt rt-text">${draftText(p)}</td>
+    </tr>`;
+}
+
+function rosterTable(g) {
+  return `
+    <table class="roster">
+      <caption>${esc(g.label)} <span class="rt-count">${g.players.length}</span></caption>
+      <colgroup>
+        <col class="rt-c-num"><col class="rt-c-photo"><col class="rt-c-name"><col class="rt-c-pos">
+        <col class="rt-c-age rt-opt"><col class="rt-c-size rt-opt"><col class="rt-c-size rt-opt">
+        <col class="rt-c-college rt-opt"><col class="rt-c-draft rt-opt">
+      </colgroup>
+      <thead><tr>
+        <th scope="col" class="rt-num" title="Numéro">N°</th>
+        <th scope="col" class="rt-photo"><span class="visually-hidden">Portrait</span></th>
+        <th scope="col" class="rt-name">Joueur</th>
+        <th scope="col" class="rt-pos">Poste</th>
+        <th scope="col" class="rt-opt">Âge</th>
+        <th scope="col" class="rt-opt">Taille</th>
+        <th scope="col" class="rt-opt">Poids</th>
+        <th scope="col" class="rt-opt rt-text">Université</th>
+        <th scope="col" class="rt-opt rt-text">Draft</th>
+      </tr></thead>
+      <tbody>${g.players.map(rosterRow).join("")}</tbody>
+    </table>`;
+}
+
+async function renderRosters() {
+  setNav("rosters");
+  document.title = "Effectifs — NFL Gameday";
+  loadingLater();
+  const seq = state.routeSeq;
+  let d;
+  try {
+    d = await api("/api/rosters");
+  } catch (err) {
+    if (seq === state.routeSeq) setMessage(`Impossible de charger les effectifs : ${err.message}`, true);
+    return;
+  }
+  if (seq !== state.routeSeq) return;
+  const divisions = new Map();
+  for (const t of d.teams) {
+    const key = t.division || t.conference || "";
+    if (!divisions.has(key)) divisions.set(key, { name: key, conference: t.conference, teams: [] });
+    divisions.get(key).teams.push(t);
+  }
+  let shown = 0;
+  const conf = (c) => `
+    <section class="block conference">
+      <h2 class="section-title">${c}</h2>
+      <div class="rt-divisions">
+        ${[...divisions.values()].filter((v) => v.conference === c).map((v) => `
+          <div class="rt-division">
+            <h3 class="rt-division-name">${esc(v.name.replace(/^(AFC|NFC) /, ""))}</h3>
+            <ul class="rt-teams">
+              ${v.teams.map((t) => `
+                <li><a class="rt-team" href="${rosterHref(t.team)}">
+                  ${logoPicture(t.team, 28, { lazy: shown++ >= 16 })}
+                  <span class="rt-team-name">${esc(t.name)}</span>
+                  <span class="rt-team-rec">${esc(record(t))}</span>
+                </a></li>`).join("")}
+            </ul>
+          </div>`).join("")}
+      </div>
+    </section>`;
+  paint(`
+    <div class="page-head"><h1 class="page-title">Effectifs</h1></div>
+    <p class="page-sub">L'effectif de chaque équipe, rangé selon le depth chart. ${rosterStamp(d)}</p>
+    ${conf("AFC")}${conf("NFC")}`);
+}
+
+async function renderRoster(abbr) {
+  setNav("rosters");
+  loadingLater();
+  const seq = state.routeSeq;
+  let d;
+  try {
+    d = await api(`/api/rosters/${encodeURIComponent(abbr)}`);
+  } catch (err) {
+    if (seq === state.routeSeq) setMessage(err.status === 404 ? "Équipe introuvable." : `Erreur : ${err.message}`, true);
+    return;
+  }
+  if (seq !== state.routeSeq) return;
+  state.rt = d;
+  document.title = `Effectif ${d.name} — NFL Gameday`;
+  const units = d.units.map((u) => `
+    <section class="block rt-unit">
+      <h2 class="section-title">${esc(u.label)}</h2>
+      ${u.groups.map(rosterTable).join("")}
+    </section>`).join("");
+  const outCount = d.out.reduce((n, g) => n + g.players.length, 0);
+  const out = outCount ? `
+    <section class="block">
+      <details class="rt-out">
+        <summary><span class="section-title">Hors effectif actif</span> <span class="rt-count">${outCount} joueurs</span></summary>
+        <p class="page-sub">Blessés et autres réserves, équipe d'entraînement.</p>
+        ${d.out.map(rosterTable).join("")}
+      </details>
+    </section>` : "";
+  const sub = [d.division ? esc(d.division) : "", record(d) ? `Bilan ${esc(record(d))}` : "", rosterStamp(d)].filter(Boolean).join(" · ");
+  const hasStarters = d.units.some((u) => u.groups.some((g) => g.players.some((p) => p.starter)));
+  paint(`
+    <a class="back" href="#/rosters">← Effectifs</a>
+    <header class="rt-head">
+      ${logoPicture(d.team, 88, { lazy: false, cls: "sb-logo" })}
+      <div>
+        <h1 class="page-title rt-title">${esc(d.name)}</h1>
+        <p class="page-sub">${sub}</p>
+      </div>
+    </header>
+    ${hasStarters ? `<p class="rt-legend"><span class="rt-dot" aria-hidden="true"></span>Titulaire au depth chart</p>` : ""}
+    ${units || `<p class="state-msg">Effectif indisponible pour le moment.</p>`}
+    ${out}`);
+}
+
 // --- Routage ----------------------------------------------------------
 async function route() {
   state.routeSeq += 1;
@@ -1174,6 +1370,8 @@ async function route() {
   if (page === "standings") return renderStandings();
   if (page === "rankings") return renderRankings(arg ? decodeURIComponent(arg).toUpperCase() : null);
   if (page === "player" && arg) return renderPlayer(decodeURIComponent(arg));
+  if (page === "rosters") return renderRosters();
+  if (page === "roster" && arg) return renderRoster(decodeURIComponent(arg).toUpperCase());
   return renderWeek(state.meta.current_week ?? 1);
 }
 

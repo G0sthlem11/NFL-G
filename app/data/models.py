@@ -5,7 +5,7 @@ Toute stat absente vaut ``None`` (affichée « — » côté front).
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -272,3 +272,77 @@ class Rankings(BaseModel):
     season: int
     min_games: int
     positions: list[PositionRanking] = []
+
+
+# --- Effectifs (app/data/rosters.py) ---------------------------------------
+class RosterPlayer(BaseModel):
+    player_id: str  # gsis_id nflverse
+    name: str
+    jersey: int | None = None
+    position: str | None = None  # case du depth chart (LT, NB, WLB…), sinon poste nflverse
+    group: str  # QB, RB, WR, TE, OL, DL, LB, CB, S, K, P, LS, OTHER
+    starter: bool = False  # rang 1 dans sa case du depth chart (blessés exclus)
+    depth: int | None = None  # rang dans sa case (1 = titulaire), None hors depth chart
+    status: str  # ACT, INA, RES, DEV, EXE…
+    status_label: str | None = None  # « inactif », « appelé », « IR », « PUP »…
+    birth_date: date | None = None  # l'âge est calculé par le front, au jour de la consultation
+    height_in: int | None = None  # pouces
+    weight_lb: int | None = None  # livres
+    years_exp: int | None = None  # saisons NFL avant celle-ci (0 = rookie)
+    college: str | None = None  # dernière université fréquentée
+    colleges: list[str] = []  # toutes, de la plus récente à la plus ancienne
+    # Logo de l'université (ESPN, 48 px, scripts.fetch_college_logos), s'il existe.
+    college_logo: str | None = None
+    college_logo_dark: str | None = None
+    draft_year: int | None = None
+    draft_pick: int | None = None  # rang du choix au total
+    headshot_url: str | None = None
+    has_page: bool = False  # une page #/player/<id> existe (au moins une stat cette saison)
+
+
+class RosterGroup(BaseModel):
+    key: str
+    label: str
+    players: list[RosterPlayer] = []
+
+
+class RosterUnit(BaseModel):
+    key: Literal["offense", "defense", "special"]
+    label: str
+    groups: list[RosterGroup] = []
+
+
+class RosterTeam(BaseModel):
+    team: str
+    name: str
+    season: int
+    conference: str | None = None
+    division: str | None = None
+    wins: int | None = None
+    losses: int | None = None
+    ties: int | None = None
+    roster_week: int | None = None  # semaine de la photo de l'effectif
+    depth_chart_at: datetime | None = None  # date de la photo du depth chart
+    active_count: int = 0
+    units: list[RosterUnit] = []  # effectif principal (ACT, INA)
+    out: list[RosterGroup] = []  # réserve, équipe d'entraînement, autres statuts
+
+
+class RosterTeamSummary(BaseModel):
+    team: str
+    name: str
+    conference: str | None = None
+    division: str | None = None
+    wins: int | None = None
+    losses: int | None = None
+    ties: int | None = None
+    active_count: int = 0
+    practice_count: int = 0
+    reserve_count: int = 0
+
+
+class RosterIndex(BaseModel):
+    season: int
+    roster_week: int | None = None
+    depth_chart_at: datetime | None = None
+    teams: list[RosterTeamSummary] = []

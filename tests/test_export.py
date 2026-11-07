@@ -12,7 +12,7 @@ from app.data.repository import NflRepository
 from app.export import content_hash, export
 from tests.test_api import fake_season
 
-DATASETS = ("schedules", "teams", "player_stats")
+DATASETS = ("schedules", "teams", "player_stats", "rosters")
 
 
 @pytest.fixture()
@@ -34,7 +34,9 @@ def test_every_file_matches_its_endpoint(exported):
     data_files = sorted(p.relative_to(res.out).as_posix() for p in (res.out / "data").rglob("*.json"))
     assert data_files == [
         "data/games/2026_01_AAA_BBB.json", "data/games/2026_02_BBB_AAA.json",
-        "data/meta.json", "data/players/P1.json", "data/rankings.json", "data/standings.json", "data/teams.json",
+        "data/meta.json", "data/players/P1.json", "data/rankings.json",
+        "data/rosters.json", "data/rosters/AAA.json", "data/rosters/BBB.json",
+        "data/standings.json", "data/teams.json",
         "data/weeks/1.json", "data/weeks/2.json",
     ]
     for rel in data_files:

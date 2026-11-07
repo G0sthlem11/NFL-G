@@ -16,6 +16,8 @@ la réponse de l'endpoint correspondant : aucune logique n'est dupliquée.
     /api/weeks/{n}           ->  data/weeks/{n}.json
     /api/games/{game_id}     ->  data/games/{game_id}.json
     /api/players/{player_id} ->  data/players/{player_id}.json
+    /api/rosters             ->  data/rosters.json
+    /api/rosters/{abbr}      ->  data/rosters/{abbr}.json
 
 Le front (app/static/) est copié à la racine de la sortie. ``config.js`` y
 passe en mode "static", et les ``?v=`` d'index.html sont remplacés par une
@@ -137,6 +139,10 @@ def _export_with(client: TestClient, repo: NflRepository, out: Path, previous_re
         _write(data / "teams.json", get("/api/teams"))
         _write(data / "standings.json", get("/api/standings"))
         _write(data / "rankings.json", get("/api/rankings"))
+        _write(data / "rosters.json", get("/api/rosters"))
+        team_abbrs = [t["abbr"] for t in json.loads(get("/api/teams"))]
+        for abbr in team_abbrs:
+            _write(data / "rosters" / f"{abbr}.json", get(f"/api/rosters/{abbr}"))
 
         weeks = [w["week"] for w in meta["weeks"]]
         for n in weeks:
@@ -162,7 +168,8 @@ def _export_with(client: TestClient, repo: NflRepository, out: Path, previous_re
     return ExportResult(
         out=out, files=len(files), bytes=sum(p.stat().st_size for p in files),
         content_hash=content_hash(data),
-        counts={"weeks": len(weeks), "games": len(game_ids), "players": len(player_ids)},
+        counts={"weeks": len(weeks), "games": len(game_ids), "players": len(player_ids),
+                "rosters": len(team_abbrs)},
     )
 
 
@@ -190,7 +197,8 @@ def main_cli(argv: list[str] | None = None) -> int:
 
     mb = res.bytes / 1_000_000
     print(f"Export saison {args.season} -> {res.out}/ en {time.time() - t:.1f} s")
-    print(f"  {res.counts['weeks']} semaines, {res.counts['games']} matchs, {res.counts['players']} joueurs")
+    print(f"  {res.counts['weeks']} semaines, {res.counts['games']} matchs, {res.counts['players']} joueurs, "
+          f"{res.counts['rosters']} effectifs")
     print(f"  {res.files} fichiers, {mb:.1f} Mo")
     print(f"  empreinte des données : {res.content_hash[:16]}")
     if mb > 30:
