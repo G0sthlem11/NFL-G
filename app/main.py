@@ -13,7 +13,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 
 from .data.cache import SeasonCache
-from .data.models import DivisionStandings, Game, GameDetail, Meta, PlayerSeason, Rankings, Team
+from .data.models import (DivisionStandings, Game, GameDetail, Meta, PlayerSeason, Rankings, RosterIndex,
+                          RosterTeam, Team)
 from .data.repository import NflRepository
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -68,6 +69,19 @@ def player(player_id: str) -> PlayerSeason:
     if season is None:
         raise HTTPException(404, f"Joueur inconnu : {player_id}")
     return season
+
+
+@app.get("/api/rosters", response_model=RosterIndex)
+def rosters() -> RosterIndex:
+    return repo.rosters_index()
+
+
+@app.get("/api/rosters/{abbr}", response_model=RosterTeam)
+def roster(abbr: str) -> RosterTeam:
+    team = repo.roster(abbr)
+    if team is None:
+        raise HTTPException(404, f"Équipe inconnue : {abbr}")
+    return team
 
 
 @app.post("/api/refresh", response_model=Meta)

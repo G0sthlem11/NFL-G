@@ -6,9 +6,10 @@ import polars as pl
 from .cache import SeasonCache
 from .key_players import MvpScale, load_config, select_match_key_players
 from .models import (DivisionStandings, Game, GameDetail, MatchKeyPlayers, Meta, PlayerGame,
-                     PlayerSeason, Rankings, Team, WeekInfo)
+                     PlayerSeason, Rankings, RosterIndex, RosterTeam, StandingRow, Team, WeekInfo)
 from .normalize import as_int, as_str, to_game, to_player_line, to_team_stats, week_label
 from .rankings import compute_rankings
+from .rosters import build_index, build_team_roster
 from .standings import compute_standings
 from .team_assets import PAPER_DARK, PAPER_LIGHT, dot_color, logo_path
 
@@ -186,6 +187,36 @@ class NflRepository:
                 self.cache.get("players"), pfr if "game_id" in pfr.columns else None)
             self._rankings_version = version
         return self._rankings
+
+    # --- Effectifs (app/data/rosters.py) -------------------------------------
+    def _standings_by_team(self) -> dict[str, StandingRow]:
+        return {r.team: r for d in self.standings() for r in d.rows}
+
+    def _roster_inputs(self) -> tuple[pl.DataFrame, pl.DataFrame, set[str]]:
+        """Rosters, depth charts et joueurs ayant une page,
+        recalculés quand le cache change (l'export appelle 33 fois)."""
+        version = (self.cache.meta() or {}).get("fetched_at")
+        if getattr(self, "_roster_version", object()) != version:
+            ps = self.cache.get("player_stats")
+            pages = set(ps["player_id"].drop_nulls().to_list()) if not ps.is_empty() else set()
+            self._roster_data = (self.cache.get("rosters"), self.cache.get("depth_charts"), pages)
+            self._roster_version = version
+        return self._roster_data
+
+    def rosters_index(self) -> RosterIndex:
+        rosters, depth, _ = self._roster_inputs()
+        teams = [t.model_dump() for t in self.teams()]
+        return build_index(self.season, teams, rosters, depth, self._standings_by_team())
+
+    def roster(self, abbr: str) -> RosterTeam | None:
+        team = next((t for t in self.teams() if t.abbr == abbr.upper()), None)
+        if team is None:
+            return None
+        rosters, depth, pages = self._roster_inputs()
+        r = rosters.filter(pl.col("team") == team.abbr) if not rosters.is_empty() else rosters
+        d = depth.filter(pl.col("team") == team.abbr) if not depth.is_empty() else depth
+        return build_team_roster(team.abbr, team.name, self.season, r, d, pages,
+                                 self._standings_by_team().get(team.abbr), team.conference, team.division)
 
     def mvp_scale(self) -> MvpScale:
         """Distributions de référence du MVP, recalculées quand le cache change.

@@ -35,15 +35,37 @@ def fake_season(season: int) -> dict[str, pl.DataFrame]:
         "game_id": ["2026_01_AAA_BBB"], "team": ["AAA"], "completions": [20], "attempts": [30],
         "passing_yards": [250],
     })
-    return {"schedules": schedules, "teams": teams, "player_stats": player_stats}
+    rosters = pl.DataFrame({
+        "season": [2026, 2026], "week": [2, 2], "team": ["AAA", "AAA"], "gsis_id": ["P1", "P2"],
+        "full_name": ["Alpha Passeur", "Alpha Blessé"], "jersey_number": [7, 81],
+        "position": ["QB", "WR"], "depth_chart_position": ["QB", "WR"], "status": ["ACT", "RES"],
+        "status_description_abbr": ["A01", "R01"], "height": [75, 72], "weight": [220, 200],
+        "birth_date": ["2001-10-03", "2000-01-01"], "years_exp": [3, 0], "college": ["Ohio State", None],
+        "draft_number": [2, None],
+    })
+    return {"schedules": schedules, "teams": teams, "player_stats": player_stats, "rosters": rosters}
 
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     cache = SeasonCache(2026, data_dir=tmp_path, downloader=fake_season,
-                        datasets=("schedules", "teams", "player_stats"))
+                        datasets=("schedules", "teams", "player_stats", "rosters"))
     monkeypatch.setattr(main, "repo", NflRepository(cache))
     return TestClient(main.app)
+
+
+def test_rosters(client):
+    idx = client.get("/api/rosters").json()
+    assert [(t["team"], t["active_count"], t["reserve_count"], t["wins"]) for t in idx["teams"]] == [
+        ("AAA", 1, 1, 1), ("BBB", 0, 0, 0)]
+    # Pas de depth chart dans la mini-saison : tri par numéro, sans titulaire.
+    aaa = client.get("/api/rosters/aaa").json()
+    assert aaa["name"] == "Alpha" and aaa["depth_chart_at"] is None and aaa["roster_week"] == 2
+    qb = aaa["units"][0]["groups"][0]["players"][0]
+    assert (qb["player_id"], qb["starter"], qb["has_page"], qb["draft_pick"]) == ("P1", False, True, 2)
+    assert aaa["out"][0]["players"][0]["status_label"] == "IR"
+    assert client.get("/api/rosters/BBB").json()["units"] == []
+    assert client.get("/api/rosters/ZZZ").status_code == 404
 
 
 def test_meta_and_week(client):

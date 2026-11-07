@@ -1,0 +1,826 @@
+{
+ "Air Force": {
+  "logo": "logos/college/2005.png",
+  "logo_dark": "logos/college/dark/2005.png"
+ },
+ "Akron": {
+  "logo": "logos/college/2006.png",
+  "logo_dark": "logos/college/dark/2006.png"
+ },
+ "Alabama": {
+  "logo": "logos/college/333.png"
+ },
+ "Alabama A&M": {
+  "logo": "logos/college/2010.png",
+  "logo_dark": "logos/college/dark/2010.png"
+ },
+ "Alabama State": {
+  "logo": "logos/college/2011.png",
+  "logo_dark": "logos/college/dark/2011.png"
+ },
+ "Albany State (GA)": {
+  "logo": "logos/college/2013.png"
+ },
+ "Alcorn State": {
+  "logo": "logos/college/2016.png"
+ },
+ "Appalachian State": {
+  "logo": "logos/college/2026.png"
+ },
+ "Arizona": {
+  "logo": "logos/college/12.png",
+  "logo_dark": "logos/college/dark/12.png"
+ },
+ "Arizona State": {
+  "logo": "logos/college/9.png"
+ },
+ "Arkansas": {
+  "logo": "logos/college/8.png"
+ },
+ "Arkansas State": {
+  "logo": "logos/college/2032.png",
+  "logo_dark": "logos/college/dark/2032.png"
+ },
+ "Army": {
+  "logo": "logos/college/349.png"
+ },
+ "Auburn": {
+  "logo": "logos/college/2.png",
+  "logo_dark": "logos/college/dark/2.png"
+ },
+ "Austin Peay": {
+  "logo": "logos/college/2046.png"
+ },
+ "Azusa Pacific": {
+  "logo": "logos/college/2049.png"
+ },
+ "BYU": {
+  "logo": "logos/college/252.png",
+  "logo_dark": "logos/college/dark/252.png"
+ },
+ "Ball State": {
+  "logo": "logos/college/2050.png",
+  "logo_dark": "logos/college/dark/2050.png"
+ },
+ "Barton College": {
+  "logo": "logos/college/122666.png"
+ },
+ "Baylor": {
+  "logo": "logos/college/239.png",
+  "logo_dark": "logos/college/dark/239.png"
+ },
+ "Bemidji State University": {
+  "logo": "logos/college/132.png"
+ },
+ "Boise State": {
+  "logo": "logos/college/68.png"
+ },
+ "Boston College": {
+  "logo": "logos/college/103.png",
+  "logo_dark": "logos/college/dark/103.png"
+ },
+ "Bowling Green": {
+  "logo": "logos/college/189.png",
+  "logo_dark": "logos/college/dark/189.png"
+ },
+ "Brown": {
+  "logo": "logos/college/225.png"
+ },
+ "Bryant": {
+  "logo": "logos/college/2803.png"
+ },
+ "Buffalo": {
+  "logo": "logos/college/2084.png"
+ },
+ "Cal Poly (San Luis Obispo)": {
+  "logo": "logos/college/13.png",
+  "logo_dark": "logos/college/dark/13.png"
+ },
+ "California": {
+  "logo": "logos/college/25.png",
+  "logo_dark": "logos/college/dark/25.png"
+ },
+ "Campbell University": {
+  "logo": "logos/college/2097.png",
+  "logo_dark": "logos/college/dark/2097.png"
+ },
+ "Central Arkansas": {
+  "logo": "logos/college/2110.png"
+ },
+ "Central Michigan": {
+  "logo": "logos/college/2117.png",
+  "logo_dark": "logos/college/dark/2117.png"
+ },
+ "Central Missouri": {
+  "logo": "logos/college/2118.png",
+  "logo_dark": "logos/college/dark/2118.png"
+ },
+ "Charlotte": {
+  "logo": "logos/college/2429.png",
+  "logo_dark": "logos/college/dark/2429.png"
+ },
+ "Cincinnati": {
+  "logo": "logos/college/2132.png",
+  "logo_dark": "logos/college/dark/2132.png"
+ },
+ "Clemson": {
+  "logo": "logos/college/228.png"
+ },
+ "Coastal Carolina": {
+  "logo": "logos/college/324.png",
+  "logo_dark": "logos/college/dark/324.png"
+ },
+ "Colorado": {
+  "logo": "logos/college/38.png"
+ },
+ "Colorado State": {
+  "logo": "logos/college/36.png"
+ },
+ "Connecticut": {
+  "logo": "logos/college/41.png"
+ },
+ "Cortland State Of New York": {
+  "logo": "logos/college/2782.png"
+ },
+ "Dayton": {
+  "logo": "logos/college/2168.png"
+ },
+ "Delaware": {
+  "logo": "logos/college/48.png"
+ },
+ "Delta State University": {
+  "logo": "logos/college/2170.png"
+ },
+ "Drake": {
+  "logo": "logos/college/2181.png",
+  "logo_dark": "logos/college/dark/2181.png"
+ },
+ "Duke": {
+  "logo": "logos/college/150.png"
+ },
+ "Duquesne": {
+  "logo": "logos/college/2184.png",
+  "logo_dark": "logos/college/dark/2184.png"
+ },
+ "East Carolina": {
+  "logo": "logos/college/151.png"
+ },
+ "East Central": {
+  "logo": "logos/college/2191.png"
+ },
+ "East Tennessee State": {
+  "logo": "logos/college/2193.png"
+ },
+ "East Texas A&M": {
+  "logo": "logos/college/2837.png"
+ },
+ "Eastern Michigan": {
+  "logo": "logos/college/2199.png"
+ },
+ "Eastern Washington": {
+  "logo": "logos/college/331.png"
+ },
+ "Elon": {
+  "logo": "logos/college/2210.png",
+  "logo_dark": "logos/college/dark/2210.png"
+ },
+ "Fayetteville State University": {
+  "logo": "logos/college/2220.png"
+ },
+ "Ferris State": {
+  "logo": "logos/college/2222.png"
+ },
+ "Findlay": {
+  "logo": "logos/college/2224.png"
+ },
+ "Florida": {
+  "logo": "logos/college/57.png",
+  "logo_dark": "logos/college/dark/57.png"
+ },
+ "Florida A&M": {
+  "logo": "logos/college/50.png"
+ },
+ "Florida Atlantic": {
+  "logo": "logos/college/2226.png"
+ },
+ "Florida International": {
+  "logo": "logos/college/2229.png",
+  "logo_dark": "logos/college/dark/2229.png"
+ },
+ "Florida State": {
+  "logo": "logos/college/52.png"
+ },
+ "Fordham": {
+  "logo": "logos/college/2230.png",
+  "logo_dark": "logos/college/dark/2230.png"
+ },
+ "Fort Hays": {
+  "logo": "logos/college/2231.png"
+ },
+ "Fort Valley State College": {
+  "logo": "logos/college/2232.png"
+ },
+ "Fresno State": {
+  "logo": "logos/college/278.png",
+  "logo_dark": "logos/college/dark/278.png"
+ },
+ "Furman": {
+  "logo": "logos/college/231.png",
+  "logo_dark": "logos/college/dark/231.png"
+ },
+ "Georgia": {
+  "logo": "logos/college/61.png"
+ },
+ "Georgia Southern": {
+  "logo": "logos/college/290.png",
+  "logo_dark": "logos/college/dark/290.png"
+ },
+ "Georgia State": {
+  "logo": "logos/college/2247.png",
+  "logo_dark": "logos/college/dark/2247.png"
+ },
+ "Georgia Tech": {
+  "logo": "logos/college/59.png",
+  "logo_dark": "logos/college/dark/59.png"
+ },
+ "Grambling State": {
+  "logo": "logos/college/2755.png",
+  "logo_dark": "logos/college/dark/2755.png"
+ },
+ "Harvard": {
+  "logo": "logos/college/108.png"
+ },
+ "Hawaii": {
+  "logo": "logos/college/62.png",
+  "logo_dark": "logos/college/dark/62.png"
+ },
+ "Holy Cross": {
+  "logo": "logos/college/107.png"
+ },
+ "Houston": {
+  "logo": "logos/college/248.png"
+ },
+ "Houston Christian University": {
+  "logo": "logos/college/2277.png"
+ },
+ "Idaho": {
+  "logo": "logos/college/70.png"
+ },
+ "Idaho State": {
+  "logo": "logos/college/304.png",
+  "logo_dark": "logos/college/dark/304.png"
+ },
+ "Illinois": {
+  "logo": "logos/college/356.png",
+  "logo_dark": "logos/college/dark/356.png"
+ },
+ "Illinois State": {
+  "logo": "logos/college/2287.png"
+ },
+ "Indiana": {
+  "logo": "logos/college/84.png"
+ },
+ "Indiana PA,  University of": {
+  "logo": "logos/college/2291.png"
+ },
+ "Indiana State": {
+  "logo": "logos/college/282.png"
+ },
+ "Iowa": {
+  "logo": "logos/college/2294.png",
+  "logo_dark": "logos/college/dark/2294.png"
+ },
+ "Iowa State": {
+  "logo": "logos/college/66.png"
+ },
+ "Jackson State University": {
+  "logo": "logos/college/2296.png",
+  "logo_dark": "logos/college/dark/2296.png"
+ },
+ "Jacksonville State": {
+  "logo": "logos/college/55.png"
+ },
+ "James Madison": {
+  "logo": "logos/college/256.png"
+ },
+ "John Carroll University": {
+  "logo": "logos/college/2302.png"
+ },
+ "Kansas": {
+  "logo": "logos/college/2305.png",
+  "logo_dark": "logos/college/dark/2305.png"
+ },
+ "Kansas State": {
+  "logo": "logos/college/2306.png",
+  "logo_dark": "logos/college/dark/2306.png"
+ },
+ "Kentucky": {
+  "logo": "logos/college/96.png",
+  "logo_dark": "logos/college/dark/96.png"
+ },
+ "Kutztown": {
+  "logo": "logos/college/2315.png"
+ },
+ "LSU": {
+  "logo": "logos/college/99.png",
+  "logo_dark": "logos/college/dark/99.png"
+ },
+ "Lane College": {
+  "logo": "logos/college/2323.png",
+  "logo_dark": "logos/college/dark/2323.png"
+ },
+ "Lenoir Rhyne": {
+  "logo": "logos/college/2331.png"
+ },
+ "Liberty": {
+  "logo": "logos/college/2335.png",
+  "logo_dark": "logos/college/dark/2335.png"
+ },
+ "Louisiana": {
+  "logo": "logos/college/309.png"
+ },
+ "Louisiana Tech": {
+  "logo": "logos/college/2348.png",
+  "logo_dark": "logos/college/dark/2348.png"
+ },
+ "Louisiana-Lafayette": {
+  "logo": "logos/college/309.png"
+ },
+ "Louisiana-Monroe": {
+  "logo": "logos/college/2433.png"
+ },
+ "Louisville": {
+  "logo": "logos/college/97.png"
+ },
+ "Maine": {
+  "logo": "logos/college/311.png"
+ },
+ "Marist": {
+  "logo": "logos/college/2368.png"
+ },
+ "Marshall": {
+  "logo": "logos/college/276.png",
+  "logo_dark": "logos/college/dark/276.png"
+ },
+ "Maryland": {
+  "logo": "logos/college/120.png",
+  "logo_dark": "logos/college/dark/120.png"
+ },
+ "Memphis": {
+  "logo": "logos/college/235.png"
+ },
+ "Miami": {
+  "logo": "logos/college/2390.png"
+ },
+ "Miami (Ohio)": {
+  "logo": "logos/college/193.png",
+  "logo_dark": "logos/college/dark/193.png"
+ },
+ "Michigan": {
+  "logo": "logos/college/130.png",
+  "logo_dark": "logos/college/dark/130.png"
+ },
+ "Michigan State": {
+  "logo": "logos/college/127.png",
+  "logo_dark": "logos/college/dark/127.png"
+ },
+ "Middle Tennessee State": {
+  "logo": "logos/college/2393.png",
+  "logo_dark": "logos/college/dark/2393.png"
+ },
+ "Minnesota": {
+  "logo": "logos/college/135.png",
+  "logo_dark": "logos/college/dark/135.png"
+ },
+ "Minnesota State": {
+  "logo": "logos/college/2364.png",
+  "logo_dark": "logos/college/dark/2364.png"
+ },
+ "Mississippi": {
+  "logo": "logos/college/145.png",
+  "logo_dark": "logos/college/dark/145.png"
+ },
+ "Mississippi State": {
+  "logo": "logos/college/344.png",
+  "logo_dark": "logos/college/dark/344.png"
+ },
+ "Missouri": {
+  "logo": "logos/college/142.png"
+ },
+ "Missouri State": {
+  "logo": "logos/college/2623.png",
+  "logo_dark": "logos/college/dark/2623.png"
+ },
+ "Missouri Western": {
+  "logo": "logos/college/137.png",
+  "logo_dark": "logos/college/dark/137.png"
+ },
+ "Missouri-Rolla": {
+  "logo": "logos/college/2402.png"
+ },
+ "Monmouth": {
+  "logo": "logos/college/2405.png",
+  "logo_dark": "logos/college/dark/2405.png"
+ },
+ "Montana": {
+  "logo": "logos/college/149.png",
+  "logo_dark": "logos/college/dark/149.png"
+ },
+ "Montana State": {
+  "logo": "logos/college/147.png",
+  "logo_dark": "logos/college/dark/147.png"
+ },
+ "Morgan State": {
+  "logo": "logos/college/2415.png"
+ },
+ "Murray State": {
+  "logo": "logos/college/93.png"
+ },
+ "N.C. State": {
+  "logo": "logos/college/152.png"
+ },
+ "NW Missouri State University": {
+  "logo": "logos/college/138.png"
+ },
+ "Navy": {
+  "logo": "logos/college/2426.png",
+  "logo_dark": "logos/college/dark/2426.png"
+ },
+ "Nebraska": {
+  "logo": "logos/college/158.png"
+ },
+ "Nevada": {
+  "logo": "logos/college/2440.png",
+  "logo_dark": "logos/college/dark/2440.png"
+ },
+ "New Hampshire": {
+  "logo": "logos/college/160.png"
+ },
+ "New Mexico": {
+  "logo": "logos/college/167.png"
+ },
+ "North Carolina": {
+  "logo": "logos/college/153.png",
+  "logo_dark": "logos/college/dark/153.png"
+ },
+ "North Carolina Central": {
+  "logo": "logos/college/2428.png"
+ },
+ "North Dakota": {
+  "logo": "logos/college/155.png"
+ },
+ "North Dakota State": {
+  "logo": "logos/college/2449.png"
+ },
+ "North Texas": {
+  "logo": "logos/college/249.png"
+ },
+ "Northern Arizona": {
+  "logo": "logos/college/2464.png"
+ },
+ "Northern Illinois": {
+  "logo": "logos/college/2459.png",
+  "logo_dark": "logos/college/dark/2459.png"
+ },
+ "Northern Iowa": {
+  "logo": "logos/college/2460.png"
+ },
+ "Northwestern": {
+  "logo": "logos/college/77.png",
+  "logo_dark": "logos/college/dark/77.png"
+ },
+ "Notre Dame": {
+  "logo": "logos/college/87.png",
+  "logo_dark": "logos/college/dark/87.png"
+ },
+ "Ohio": {
+  "logo": "logos/college/195.png"
+ },
+ "Ohio State": {
+  "logo": "logos/college/194.png",
+  "logo_dark": "logos/college/dark/194.png"
+ },
+ "Oklahoma": {
+  "logo": "logos/college/201.png",
+  "logo_dark": "logos/college/dark/201.png"
+ },
+ "Oklahoma State": {
+  "logo": "logos/college/197.png"
+ },
+ "Old Dominion": {
+  "logo": "logos/college/295.png",
+  "logo_dark": "logos/college/dark/295.png"
+ },
+ "Oregon": {
+  "logo": "logos/college/2483.png",
+  "logo_dark": "logos/college/dark/2483.png"
+ },
+ "Oregon State": {
+  "logo": "logos/college/204.png",
+  "logo_dark": "logos/college/dark/204.png"
+ },
+ "Penn": {
+  "logo": "logos/college/219.png"
+ },
+ "Penn State": {
+  "logo": "logos/college/213.png",
+  "logo_dark": "logos/college/dark/213.png"
+ },
+ "Pittsburg State (KS)": {
+  "logo": "logos/college/90.png"
+ },
+ "Pittsburgh": {
+  "logo": "logos/college/221.png",
+  "logo_dark": "logos/college/dark/221.png"
+ },
+ "Prairie View A&M": {
+  "logo": "logos/college/2504.png"
+ },
+ "Princeton": {
+  "logo": "logos/college/163.png"
+ },
+ "Purdue": {
+  "logo": "logos/college/2509.png",
+  "logo_dark": "logos/college/dark/2509.png"
+ },
+ "Rice": {
+  "logo": "logos/college/242.png",
+  "logo_dark": "logos/college/dark/242.png"
+ },
+ "Rutgers": {
+  "logo": "logos/college/164.png",
+  "logo_dark": "logos/college/dark/164.png"
+ },
+ "SMU": {
+  "logo": "logos/college/2567.png",
+  "logo_dark": "logos/college/dark/2567.png"
+ },
+ "Sacramento State": {
+  "logo": "logos/college/16.png"
+ },
+ "Sacred Heart University": {
+  "logo": "logos/college/2529.png"
+ },
+ "Saginaw Valley State": {
+  "logo": "logos/college/129.png"
+ },
+ "Sam Houston State": {
+  "logo": "logos/college/2534.png"
+ },
+ "Samford": {
+  "logo": "logos/college/2535.png"
+ },
+ "San Diego": {
+  "logo": "logos/college/301.png"
+ },
+ "San Diego State": {
+  "logo": "logos/college/21.png",
+  "logo_dark": "logos/college/dark/21.png"
+ },
+ "San Jose State": {
+  "logo": "logos/college/23.png",
+  "logo_dark": "logos/college/dark/23.png"
+ },
+ "Shepherd": {
+  "logo": "logos/college/2974.png"
+ },
+ "Sioux Falls": {
+  "logo": "logos/college/2894.png"
+ },
+ "South Alabama": {
+  "logo": "logos/college/6.png"
+ },
+ "South Carolina": {
+  "logo": "logos/college/2579.png",
+  "logo_dark": "logos/college/dark/2579.png"
+ },
+ "South Carolina State": {
+  "logo": "logos/college/2569.png"
+ },
+ "South Dakota": {
+  "logo": "logos/college/233.png",
+  "logo_dark": "logos/college/dark/233.png"
+ },
+ "South Dakota State": {
+  "logo": "logos/college/2571.png"
+ },
+ "Southeast Missouri State": {
+  "logo": "logos/college/2546.png",
+  "logo_dark": "logos/college/dark/2546.png"
+ },
+ "Southeastern Louisiana": {
+  "logo": "logos/college/2545.png",
+  "logo_dark": "logos/college/dark/2545.png"
+ },
+ "Southern Arkansas": {
+  "logo": "logos/college/2568.png"
+ },
+ "Southern Illinois": {
+  "logo": "logos/college/79.png"
+ },
+ "Southern Mississippi": {
+  "logo": "logos/college/2572.png",
+  "logo_dark": "logos/college/dark/2572.png"
+ },
+ "Southern Utah State": {
+  "logo": "logos/college/253.png",
+  "logo_dark": "logos/college/dark/253.png"
+ },
+ "St. John's (MN)": {
+  "logo": "logos/college/2600.png"
+ },
+ "Stanford": {
+  "logo": "logos/college/24.png",
+  "logo_dark": "logos/college/dark/24.png"
+ },
+ "Stephen F. Austin State": {
+  "logo": "logos/college/2617.png"
+ },
+ "Stony Brook": {
+  "logo": "logos/college/2619.png"
+ },
+ "Syracuse": {
+  "logo": "logos/college/183.png",
+  "logo_dark": "logos/college/dark/183.png"
+ },
+ "TCU": {
+  "logo": "logos/college/2628.png",
+  "logo_dark": "logos/college/dark/2628.png"
+ },
+ "Tarleton State": {
+  "logo": "logos/college/2627.png"
+ },
+ "Temple": {
+  "logo": "logos/college/218.png"
+ },
+ "Tennessee": {
+  "logo": "logos/college/2633.png"
+ },
+ "Tennessee-Chattanooga": {
+  "logo": "logos/college/236.png"
+ },
+ "Texas": {
+  "logo": "logos/college/251.png"
+ },
+ "Texas A&M": {
+  "logo": "logos/college/245.png",
+  "logo_dark": "logos/college/dark/245.png"
+ },
+ "Texas State-San Marcos": {
+  "logo": "logos/college/326.png",
+  "logo_dark": "logos/college/dark/326.png"
+ },
+ "Texas Tech": {
+  "logo": "logos/college/2641.png",
+  "logo_dark": "logos/college/dark/2641.png"
+ },
+ "Texas-El Paso": {
+  "logo": "logos/college/2638.png",
+  "logo_dark": "logos/college/dark/2638.png"
+ },
+ "Texas-San Antonio": {
+  "logo": "logos/college/2636.png",
+  "logo_dark": "logos/college/dark/2636.png"
+ },
+ "Toledo": {
+  "logo": "logos/college/2649.png",
+  "logo_dark": "logos/college/dark/2649.png"
+ },
+ "Troy": {
+  "logo": "logos/college/2653.png",
+  "logo_dark": "logos/college/dark/2653.png"
+ },
+ "Tulane": {
+  "logo": "logos/college/2655.png"
+ },
+ "Tulsa": {
+  "logo": "logos/college/202.png",
+  "logo_dark": "logos/college/dark/202.png"
+ },
+ "Tusculum College": {
+  "logo": "logos/college/2839.png"
+ },
+ "UAB": {
+  "logo": "logos/college/5.png",
+  "logo_dark": "logos/college/dark/5.png"
+ },
+ "UC Davis": {
+  "logo": "logos/college/302.png",
+  "logo_dark": "logos/college/dark/302.png"
+ },
+ "UCF": {
+  "logo": "logos/college/2116.png"
+ },
+ "UCLA": {
+  "logo": "logos/college/26.png",
+  "logo_dark": "logos/college/dark/26.png"
+ },
+ "UMass Amherst": {
+  "logo": "logos/college/113.png",
+  "logo_dark": "logos/college/dark/113.png"
+ },
+ "UNLV": {
+  "logo": "logos/college/2439.png",
+  "logo_dark": "logos/college/dark/2439.png"
+ },
+ "USC": {
+  "logo": "logos/college/30.png"
+ },
+ "University of Lock Haven": {
+  "logo": "logos/college/209.png"
+ },
+ "University of South Florida": {
+  "logo": "logos/college/58.png"
+ },
+ "Utah": {
+  "logo": "logos/college/254.png"
+ },
+ "Utah State": {
+  "logo": "logos/college/328.png",
+  "logo_dark": "logos/college/dark/328.png"
+ },
+ "Valdosta State": {
+  "logo": "logos/college/2673.png"
+ },
+ "Vanderbilt": {
+  "logo": "logos/college/238.png",
+  "logo_dark": "logos/college/dark/238.png"
+ },
+ "Villanova": {
+  "logo": "logos/college/222.png",
+  "logo_dark": "logos/college/dark/222.png"
+ },
+ "Virginia": {
+  "logo": "logos/college/258.png",
+  "logo_dark": "logos/college/dark/258.png"
+ },
+ "Virginia Tech": {
+  "logo": "logos/college/259.png",
+  "logo_dark": "logos/college/dark/259.png"
+ },
+ "Wake Forest": {
+  "logo": "logos/college/154.png",
+  "logo_dark": "logos/college/dark/154.png"
+ },
+ "Washburn": {
+  "logo": "logos/college/2687.png"
+ },
+ "Washington": {
+  "logo": "logos/college/264.png",
+  "logo_dark": "logos/college/dark/264.png"
+ },
+ "Washington State": {
+  "logo": "logos/college/265.png",
+  "logo_dark": "logos/college/dark/265.png"
+ },
+ "Weber State": {
+  "logo": "logos/college/2692.png"
+ },
+ "West Virginia": {
+  "logo": "logos/college/277.png",
+  "logo_dark": "logos/college/dark/277.png"
+ },
+ "Western Illinois": {
+  "logo": "logos/college/2710.png",
+  "logo_dark": "logos/college/dark/2710.png"
+ },
+ "Western Kentucky": {
+  "logo": "logos/college/98.png",
+  "logo_dark": "logos/college/dark/98.png"
+ },
+ "Western Michigan": {
+  "logo": "logos/college/2711.png",
+  "logo_dark": "logos/college/dark/2711.png"
+ },
+ "Western State": {
+  "logo": "logos/college/2714.png"
+ },
+ "William & Mary": {
+  "logo": "logos/college/2729.png",
+  "logo_dark": "logos/college/dark/2729.png"
+ },
+ "Wingate": {
+  "logo": "logos/college/351.png"
+ },
+ "Wisconsin": {
+  "logo": "logos/college/275.png"
+ },
+ "Wisconsin-Whitewater": {
+  "logo": "logos/college/2745.png"
+ },
+ "Wofford": {
+  "logo": "logos/college/2747.png",
+  "logo_dark": "logos/college/dark/2747.png"
+ },
+ "Wyoming": {
+  "logo": "logos/college/2751.png",
+  "logo_dark": "logos/college/dark/2751.png"
+ },
+ "Yale": {
+  "logo": "logos/college/43.png",
+  "logo_dark": "logos/college/dark/43.png"
+ },
+ "Youngstown State": {
+  "logo": "logos/college/2754.png"
+ }
+}

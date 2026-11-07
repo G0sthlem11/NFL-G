@@ -33,27 +33,37 @@ MIN_SCALE = 0.75
 MARGIN_PX = 1  # marge transparente autour du logo, dans la boîte de 48 px
 
 
+def fit_square(im: Image.Image, size: int = SMALL_LOGO_PX) -> Image.Image:
+    """Recadre un logo sur sa partie visible, équilibre son poids visuel et le
+    centre dans un carré transparent de ``size`` px (partagé avec
+    scripts.fetch_college_logos)."""
+    im = im.convert("RGBA")
+    # Recadrage sur la partie visible (les marges ESPN varient d'un logo à l'autre).
+    mask = im.getchannel("A").point(lambda v: 255 if v > 24 else 0)
+    bbox = mask.getbbox() or (0, 0, im.width, im.height)
+    im, mask = im.crop(bbox), mask.crop(bbox)
+    w, h = im.size
+    inner = size - 2 * MARGIN_PX
+    fit = min(inner / w, inner / h)
+    ink = mask.histogram()[255] / (w * h) * (w * fit) * (h * fit) / inner ** 2
+    scale = fit * max(MIN_SCALE, min(1.0, (INK_TARGET / ink) ** 0.5)) if ink else fit
+    im = im.resize((max(1, round(w * scale)), max(1, round(h * scale))), Image.LANCZOS)
+    # Centré sur un carré transparent : toutes les images ont la même taille.
+    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    out.paste(im, ((size - im.width) // 2, (size - im.height) // 2))
+    return out
+
+
+def save_small(im: Image.Image, dst) -> None:
+    """Palette de 256 couleurs (transparence comprise) : invisible à cette
+    taille, et environ deux fois plus léger qu'un PNG en couleurs vraies."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    im.quantize(256, method=Image.Quantize.FASTOCTREE).save(dst, optimize=True)
+
+
 def resize(src, dst) -> tuple[int, int]:
-    S = SMALL_LOGO_PX
     with Image.open(src) as im:
-        im = im.convert("RGBA")
-        # Recadrage sur la partie visible (les marges ESPN varient un peu).
-        mask = im.getchannel("A").point(lambda v: 255 if v > 24 else 0)
-        bbox = mask.getbbox() or (0, 0, im.width, im.height)
-        im, mask = im.crop(bbox), mask.crop(bbox)
-        w, h = im.size
-        inner = S - 2 * MARGIN_PX
-        fit = min(inner / w, inner / h)
-        ink = mask.histogram()[255] / (w * h) * (w * fit) * (h * fit) / inner ** 2
-        scale = fit * max(MIN_SCALE, min(1.0, (INK_TARGET / ink) ** 0.5)) if ink else fit
-        im = im.resize((max(1, round(w * scale)), max(1, round(h * scale))), Image.LANCZOS)
-        # Centré sur un carré transparent : toutes les images ont la même taille.
-        out = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-        out.paste(im, ((S - im.width) // 2, (S - im.height) // 2))
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        # Palette de 256 couleurs (transparence comprise) : invisible à cette
-        # taille, et environ deux fois plus léger qu'un PNG en couleurs vraies.
-        out.quantize(256, method=Image.Quantize.FASTOCTREE).save(dst, optimize=True)
+        save_small(fit_square(im), dst)
     return src.stat().st_size, dst.stat().st_size
 
 
