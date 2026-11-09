@@ -4,6 +4,7 @@ Usage :
     py -m app.export                       # saison en cours, dans dist/
     py -m app.export --season 2025 --out build
     py -m app.export --refresh             # force le téléchargement nflverse (échoue s'il échoue)
+    py -m app.export --status-file s.json  # écrit aussi l'état des matchs (alerte de l'Action)
 
 Principe : l'export interroge l'application FastAPI elle-même, en mémoire et
 sans réseau (client ASGI de Starlette). Chaque fichier est donc *exactement*
@@ -112,6 +113,19 @@ def content_hash(data_dir: Path) -> str:
     return h.hexdigest()
 
 
+def status(repo: NflRepository) -> dict:
+    """État des matchs après l'export, lu par scripts/check_updates.py (alerte
+    « stats en retard » de l'Action). Hors de dist/ : rien de public."""
+    games = []
+    for g in repo.all_games():
+        kickoff = g.kickoff_paris.astimezone(timezone.utc).isoformat() if g.kickoff_paris else None
+        games.append({"game_id": g.game_id, "label": f"{g.away_team} @ {g.home_team}, {g.week_label}",
+                      "kickoff_utc": kickoff, "final": g.status == "final", "stats_pending": g.stats_pending})
+    fetched = repo.cache.fetched_at()
+    return {"season": repo.season, "exported_at": datetime.now(timezone.utc).isoformat(),
+            "fetched_at": fetched.isoformat() if fetched else None, "games": games}
+
+
 def export(repo: NflRepository, out: Path) -> ExportResult:
     previous_repo = main.repo
     main.repo = repo  # les endpoints lisent ce dépôt
@@ -183,6 +197,8 @@ def main_cli(argv: list[str] | None = None) -> int:
                    help="force le téléchargement nflverse ; échoue (sans rien écrire) s'il échoue")
     p.add_argument("--hash-file", type=Path,
                    help="écrit l'empreinte du contenu de data/ dans ce fichier")
+    p.add_argument("--status-file", type=Path,
+                   help="écrit l'état des matchs (terminés, stats en attente) dans ce fichier JSON")
     args = p.parse_args(argv)
 
     t = time.time()
@@ -194,6 +210,13 @@ def main_cli(argv: list[str] | None = None) -> int:
     res = export(repo, args.out)
     if args.hash_file:
         args.hash_file.write_text(res.content_hash + "\n", encoding="utf-8")
+    if args.status_file:
+        state = status(repo)
+        args.status_file.parent.mkdir(parents=True, exist_ok=True)
+        args.status_file.write_text(json.dumps(state, ensure_ascii=False, indent=1), encoding="utf-8")
+        pending = [g["game_id"] for g in state["games"] if g["stats_pending"]]
+        if pending:
+            print(f"  stats en attente de publication : {', '.join(pending)}")
 
     mb = res.bytes / 1_000_000
     print(f"Export saison {args.season} -> {res.out}/ en {time.time() - t:.1f} s")

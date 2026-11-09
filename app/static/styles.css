@@ -889,3 +889,7 @@ a.st-team-inner:hover .st-abbr { text-decoration: underline; text-decoration-thi
 .rt-meta-college { height: 18px; line-height: 18px; overflow: hidden; }
 .rt-meta-college .college-badge { display: flex; height: 18px; vertical-align: top; }
 .rt-meta-college .college-name { white-space: nowrap; }
+
+/* --- Données en attente de publication (nflverse) ---------------------- */
+.game-status .is-pending { font-style: italic; color: var(--muted); }
+.stats-pending { margin: 0; padding: 14px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); font-style: italic; color: var(--muted); }

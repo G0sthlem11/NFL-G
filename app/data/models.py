@@ -24,6 +24,9 @@ class Game(BaseModel):
     week_label: str
     game_type: str  # REG, WC, DIV, CON, SB
     status: Literal["final", "scheduled"]
+    # Match terminé, mais nflverse n'a pas encore publié les stats des joueurs
+    # (en général quelques heures après le match) : le front l'annonce.
+    stats_pending: bool = False
     gameday: str | None = None  # date du match, heure de l'Est (YYYY-MM-DD)
     kickoff_paris: datetime | None = None
     away_team: str

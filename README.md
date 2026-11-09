@@ -15,7 +15,7 @@ Les données viennent de [nflverse](https://github.com/nflverse), via le package
 | | Mode local | Mode statique (en ligne) |
 |---|---|---|
 | Lancement | `py -m uvicorn app.main:app --reload` | Site sur Vercel, accès réservé à ton compte |
-| Données | API FastAPI (`/api/...`), cache local rafraîchi toutes les 6 h | Fichiers JSON (`/data/....json`) régénérés par une GitHub Action, chaque lendemain de matchs |
+| Données | API FastAPI (`/api/...`), cache local rafraîchi toutes les 6 h | Fichiers JSON (`/data/....json`) régénérés par une GitHub Action, dans les 3 h qui suivent chaque publication nflverse |
 | Bouton « Actualiser » | Oui | Non : à la place, la mention « Données du [date, heure] » |
 | Usage | Développement | Consultation depuis n'importe où (PC, téléphone) |
 
@@ -133,7 +133,8 @@ py -m pytest
 | `tests/test_standings.py` | Calcul du classement. |
 | `tests/test_rosters.py` | Effectifs : dernière photo par équipe, blessés retirés du depth chart, ordre des postes et des joueurs, tri par numéro sans depth chart, statuts écartés ou repliés. Logos des universités : correspondance des noms, homonymes, fichiers présents, choix de la variante sombre. |
 | `tests/test_data_layer.py` | Cache et normalisation. |
-| `tests/test_api.py` | API de bout en bout, sur une mini-saison fictive sans accès réseau. |
+| `tests/test_api.py` | API de bout en bout, sur une mini-saison fictive sans accès réseau, dont les matchs terminés sans stats (`stats_pending`) et l'état d'export lu par l'alerte. |
+| `tests/test_check_updates.py` | Vérification légère de l'Action : saison en cours, empreinte des scores, décision d'export, alerte des matchs en retard. |
 
 Pour contrôler la sélection des joueurs clés sur un vrai match :
 
@@ -145,20 +146,45 @@ py -m scripts.check_key_players 2026_08_CAR_GB
 
 ### Comment ça marche
 
-Le fichier `.github/workflows/deploy.yml` est une GitHub Action. Elle se déclenche dans trois cas :
-- une fois par jour à 08:17 UTC (09:17 à Paris l'hiver), seulement les lendemains de matchs (dimanche, lundi, mardi, vendredi) et seulement de septembre à février ;
-- à chaque push sur `main`, sauf si seuls des fichiers `.md` ou `scripts/` changent. Le push réutilise les données en cache si elles ont moins de 6 h ;
-- à la demande, depuis l'onglet Actions (**Run workflow**), avec ou sans retéléchargement des données.
+Le fichier `.github/workflows/deploy.yml` est une GitHub Action à deux jobs : `check`, une vérification légère, et `deploy`, l'export complet suivi du déploiement. Elle se déclenche dans trois cas :
+- **toutes les 3 heures** (00:41, 03:41… 21:41 UTC), du vendredi au mardi, de septembre à février. Seul le job `check` tourne d'abord ; `deploy` ne suit que si nflverse a publié quelque chose de nouveau ;
+- à chaque push sur `main`, sauf si seuls des fichiers `.md` ou `scripts/` changent : `deploy` directement, avec les données en cache si elles ont moins de 6 h ;
+- à la demande, depuis l'onglet Actions (**Run workflow**) : `deploy` directement, avec ou sans retéléchargement des données.
 
-Consommation : environ 1 minute par exécution. Le calendrier prévoit 4 exécutions par semaine (dimanche, lundi, mardi, vendredi), soit environ 17 par mois de septembre à février, et aucune hors saison. Cela fait **une vingtaine de minutes par mois** en saison, plus une minute par push ou par lancement manuel (quota gratuit d'un dépôt privé : 2 000). Les dépendances pip, les paquets npm de la CLI Vercel et les données nflverse sont en cache entre deux exécutions ; la saison précédente, figée, n'est jamais retéléchargée. Une exécution bloquée s'arrête au bout de 15 minutes, et une nouvelle exécution annule celle en cours.
+**Pourquoi toutes les 3 h** : nflverse publie les stats d'une journée de matchs à une heure variable (le lundi 9 novembre 2026, vers 14:15 UTC pour les matchs du dimanche), et GitHub peut retarder une exécution planifiée de plusieurs heures (7 h le dimanche 8 novembre). Une seule exécution par jour tombait trop souvent avant la publication.
 
-À chaque exécution, elle enchaîne ces étapes :
+**Le job `check`** (`scripts/check_updates.py`, bibliothèque standard seulement, sans installation, environ 20 s) :
+1. relève la date de mise à jour des fichiers de match de la saison, via l'API GitHub des releases `nflverse-data` : stats joueurs et équipes par semaine, play-by-play, stats avancées défensives PFR, snaps ;
+2. relit le calendrier (`games.csv`) et calcule une empreinte des scores. Ce fichier est republié toutes les heures, donc on compare son contenu, pas sa date. Les rosters et les depth charts ne sont pas surveillés : ils changent plusieurs fois par jour ;
+3. compare ce relevé à celui du dernier export réussi, gardé dans le cache de l'Action (`.deploy-state/`). Le job `deploy` est lancé si un fichier ou un score a changé, ou si le dernier export a plus de 24 h (rafraîchissement quotidien des effectifs) ;
+4. sinon, évalue l'alerte (voir plus bas) et s'arrête.
 
+**Le job `deploy`** enchaîne :
 1. Installer Python 3.13 et les dépendances.
-2. Lancer `python -m app.export --refresh` (sans `--refresh` sur un push), qui télécharge les données nflverse et génère `dist/`. **Si nflverse est injoignable, le workflow s'arrête ici** et le site garde sa version précédente.
-3. Lancer les tests Python, puis ceux du middleware de protection (`node --test`). S'ils échouent, rien n'est déployé.
-4. Comparer l'empreinte des données à celle du dernier déploiement. Si rien n'a changé et que l'exécution est planifiée, le déploiement est sauté. Un push ou un lancement manuel déploie toujours.
-5. Déployer `dist/` en production avec la CLI Vercel (`vercel pull`, `vercel build`, `vercel deploy --prebuilt --prod`).
+2. Relever l'état des sources nflverse (avant le téléchargement : une publication pendant l'export sera vue au passage suivant).
+3. Lancer `python -m app.export --refresh` (sans `--refresh` sur un push), qui télécharge les données nflverse et génère `dist/`, plus l'état des matchs (`--status-file`). **Si nflverse est injoignable, le workflow s'arrête ici** et le site garde sa version précédente.
+4. Lancer les tests Python, puis ceux du middleware de protection (`node --test`). S'ils échouent, rien n'est déployé.
+5. Comparer l'empreinte des données à celle du dernier déploiement. Si rien n'a changé et que l'exécution est planifiée, le déploiement est sauté. Un push ou un lancement manuel déploie toujours.
+6. Déployer `dist/` en production avec la CLI Vercel (`vercel pull`, `vercel build`, `vercel deploy --prebuilt --prod`).
+7. Enregistrer le nouvel état (relevé des sources, état des matchs, empreinte) dans le cache, puis évaluer l'alerte.
+
+**Alerte par e-mail** : l'exécution échoue dans deux cas, et GitHub envoie alors un e-mail :
+- un match terminé depuis plus de 24 h (coup d'envoi il y a plus de 28 h) n'a toujours pas de stats sur le site ;
+- un match commencé depuis plus de 28 h n'a toujours pas de score.
+
+Le résumé de l'exécution liste les matchs concernés. Les e-mails d'échec des workflows planifiés vont au dernier compte qui a modifié le `cron` : vérifie que **Settings → Notifications → Actions** envoie bien un e-mail, au moins pour les échecs (« Only notify for failed workflows »). Que faire : regarder si nflverse a publié (<https://github.com/nflverse/nflverse-data/releases>), puis lancer le workflow à la main.
+
+**Consommation** (GitHub arrondit chaque job à la minute supérieure) :
+
+| Poste | Par semaine en saison | Par mois en saison |
+|---|---|---|
+| Vérifications : 8 par jour, 5 jours sur 7 | 40 × 1 min | environ 175 min |
+| Exports complets : nouvelles stats ou nouveaux scores, et rafraîchissement quotidien (environ 10 par semaine) | 10 × 1,5 min | environ 65 min |
+| **Total planifié** | **environ 55 min** | **environ 240 min** |
+
+À cela s'ajoutent environ 1,5 min par push ou lancement manuel. Aucune exécution planifiée de mars à août. Le quota gratuit d'un dépôt privé est de 2 000 minutes par mois : on en utilise environ 12 %.
+
+Les dépendances pip, les paquets npm de la CLI Vercel et les données nflverse sont en cache entre deux exécutions ; la saison précédente, figée, n'est jamais retéléchargée. Une exécution bloquée s'arrête au bout de 15 minutes. Deux exécutions ne tournent jamais en même temps : la nouvelle attend la fin de celle en cours.
 
 Les données ne sont jamais commitées dans le dépôt. Vercel ne déploie rien de lui-même à chaque push (`"git": { "deploymentEnabled": false }` dans `vercel.json`) : seule l'Action déploie.
 
@@ -240,7 +266,7 @@ Avec ce réglage :
 **6. Premier déploiement et vérification**
 
 1. Sur GitHub, va dans l'onglet **Actions**, choisis **Déploiement Vercel**, puis **Run workflow → main → Run workflow**.
-2. Attends la coche verte, environ 1 minute. Le résumé de l'exécution affiche l'URL déployée.
+2. Attends la coche verte, environ 1 à 2 minutes. Le résumé de l'exécution affiche l'URL déployée.
 3. Ouvre <https://nfl-g.vercel.app> dans une **fenêtre de navigation privée** : la page « Accès privé » de Gameday doit s'afficher. Saisis le mot de passe : le site s'affiche.
 4. Sur ton téléphone, ouvre le site dans Chrome et connecte-toi. Choisis ensuite **⋮ → Installer l'application** (ou « Ajouter à l'écran d'accueil » puis « Installer »). L'app s'ouvre alors en plein écran. La session dure un an.
 
@@ -267,8 +293,9 @@ C'est `middleware.js`, un Routing Middleware Vercel, qui protège le site en lig
 
 ### Limites de la version en ligne
 
-- **Fraîcheur des données** : les stats d'un match arrivent le lendemain matin (exécution de 08:17 UTC), à condition que nflverse les ait publiées ; sinon, à l'exécution suivante. GitHub peut aussi retarder les exécutions planifiées de quelques minutes, parfois davantage. Pour forcer une mise à jour, lance le workflow à la main.
-- **Minutes GitHub Actions** : une exécution dure environ 1 minute, soit **une vingtaine de minutes par mois** en saison (environ 17 exécutions planifiées), plus une minute par push ou par lancement manuel. Le quota gratuit d'un dépôt privé est de 2 000 minutes par mois.
+- **Fraîcheur des données** : du vendredi au mardi, les stats d'un match arrivent sur le site dans les 3 h qui suivent leur publication par nflverse, en général quelques heures après le match. GitHub peut retarder une exécution planifiée de quelques minutes, parfois de plusieurs heures : le passage suivant rattrape alors le retard. Pour forcer une mise à jour, lance le workflow à la main. Un match terminé dont les stats ne sont pas encore publiées affiche « Stats en attente de publication ».
+- **Minutes GitHub Actions** : **environ 240 minutes par mois** en saison, soit environ 175 vérifications d'une minute et environ 45 exports complets d'une minute et demie. S'y ajoutent environ 1,5 min par push ou lancement manuel. Rien de mars à août. Le quota gratuit d'un dépôt privé est de 2 000 minutes par mois.
+- **Compte GitHub bloqué** : si GitHub bloque le compte, par exemple pour un problème de facturation comme le 8 novembre 2026, aucune exécution ne démarre. Le résumé de l'exécution l'indique (« account is locked due to a billing issue ») et le site reste sur sa dernière version. Il faut régler le problème dans **Settings → Billing and licensing**, puis lancer le workflow à la main.
 - **Token Vercel** : à son expiration, les déploiements échouent et le site reste sur sa dernière version. Il suffit alors de recréer le token et de mettre à jour le secret `VERCEL_TOKEN`.
 - **Niveau de protection** : un mot de passe unique protège moins bien qu'un compte Vercel avec double authentification. Pour des statistiques NFL publiques, c'est un compromis acceptable. Garde le mot de passe pour toi seul, et change `SESSION_SECRET` en cas de doute.
 
@@ -376,7 +403,7 @@ app/
     vendor/motion.js Motion 14.4.0 (https://motion.dev, MIT), copie locale
     logos/           logos des équipes (128 px), logos/dark/ pour le thème sombre, logos/48/ en petit,
                      logos/college/ pour les universités (48 px)
-scripts/             exploration des données et contrôles
+scripts/             exploration des données et contrôles ; check_updates.py : vérification légère de l'Action
 tests/               pytest et jeux d'exemple (fixtures/)
 vercel.json          configuration Vercel (sert dist/, en-têtes de cache)
 middleware.js        protection par mot de passe du site en ligne (Routing Middleware)
@@ -402,7 +429,9 @@ Le front ne voit jamais les DataFrames bruts : il ne reçoit que les modèles Py
 ## Source et limites
 
 - **Source** : nflverse publie ses jeux de données sur GitHub. On utilise le calendrier et les résultats, les stats par joueur et par équipe, les stats avancées défensives de PFR (pressions), la table des joueurs (correspondance des identifiants PFR et nflverse, positions), les snaps par match (PFR), les équipes, le play-by-play, les rosters hebdomadaires et les depth charts (ESPN).
-- **Pas de direct** : nflverse met à jour ses données **quelques heures après les matchs**. Un match qui vient de se terminer peut donc encore apparaître « À venir », ou sans statistiques.
+- **Pas de direct** : nflverse met à jour ses données **quelques heures après les matchs**. En attendant :
+  - un match commencé depuis plus de 4 h mais encore sans score affiche « Score en attente » au lieu de « À venir » ;
+  - un match terminé dont les stats des joueurs ne sont pas encore publiées affiche « Stats en attente » dans la liste, et « Stats en attente de publication » sur sa page, à la place des tableaux.
 - **Météo** : elle n'est renseignée que pour une partie des matchs en extérieur, et quasiment jamais sous dôme. Elle s'affiche seulement quand elle existe.
 - **Statistiques des joueurs** : `player_stats` ne contient que les joueurs ayant au moins une stat dans le match. Un titulaire présent sur le terrain mais sans aucune stat est donc traité comme un remplacé, avec la mention « actif sans stat ».
 - **Classement** : le départage des égalités est simplifié (confrontations directes, puis division, conférence et différence de points). Les règles officielles de la NFL vont plus loin. Dans de rares cas d'égalité, l'ordre peut différer du classement officiel.

@@ -1,21 +1,27 @@
 # Régénère les données (export statique) et déploie dist/ en production sur Vercel.
 #
-# Déclencheurs (sobres, pour rester très loin du quota gratuit d'Actions) :
-#   - planifié : une fois par jour à 08:17 UTC (09:17 à Paris l'hiver, 10:17
-#     l'été), seulement les lendemains de matchs (dimanche, lundi, mardi,
-#     vendredi) et seulement de septembre à février. Hors saison : aucune
-#     exécution planifiée. L'heure laisse à nflverse le temps de publier les
-#     stats du match de la nuit (Thursday/Sunday/Monday Night Football).
+# Déclencheurs :
+#   - planifié : toutes les 3 h (00:41, 03:41… 21:41 UTC), du vendredi au mardi,
+#     de septembre à février. Chaque passage lance d'abord un job « check »
+#     très léger (environ 20 s, sans dépendances : scripts/check_updates.py)
+#     qui regarde si nflverse a publié quelque chose depuis le dernier export :
+#     dates de mise à jour des fichiers de stats (API GitHub des releases
+#     nflverse-data) et scores du calendrier. Le job « deploy » (export
+#     complet, tests, déploiement) ne tourne que dans ce cas, ou une fois par
+#     jour au minimum pour rafraîchir les effectifs. Hors saison : aucune
+#     exécution planifiée.
 #   - push sur main, sauf si seuls la documentation ou les scripts changent ;
-#     les données en cache (moins de 6 h) sont alors réutilisées, sans
-#     retéléchargement.
+#     les données en cache (moins de 6 h) sont alors réutilisées.
 #   - à la main : onglet Actions > Déploiement Vercel > Run workflow, avec ou
 #     sans retéléchargement des données.
 #
-# Planifié et données inchangées depuis le dernier déploiement : pas de
-# déploiement (empreinte de dist/data/ gardée en cache). Si le téléchargement
-# nflverse ou les tests échouent, rien n'est déployé : le site garde sa
-# version précédente.
+# Alerte : si un match terminé depuis plus de 24 h n'a toujours pas de stats
+# sur le site (ou un match commencé depuis plus de 28 h n'a pas de score),
+# l'exécution échoue avec la liste des matchs, et GitHub envoie un e-mail.
+#
+# État gardé dans le cache de l'Action (.deploy-state/) : relevé des sources
+# nflverse du dernier export réussi (sources.json), état des matchs sur le
+# site (status.json), empreinte des données déployées (hash).
 #
 # Secrets requis (Settings > Secrets and variables > Actions) :
 #   VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
@@ -24,8 +30,8 @@ name: Déploiement Vercel
 
 on:
   schedule:
-    # minute heure jour mois jour-de-semaine (0 = dimanche)
-    - cron: "17 8 * 1,2,9-12 0,1,2,5"
+    # minute heure jour mois jour-de-semaine (0 = dimanche) : vendredi à mardi
+    - cron: "41 */3 * 1,2,9-12 0,1,2,5,6"
   push:
     branches: [main]
     paths-ignore:
@@ -42,14 +48,51 @@ on:
 permissions:
   contents: read
 
-# Une seule exécution à la fois : une nouvelle annule celle en cours (le
-# dernier état de main l'emporte, et on ne paie pas deux fois le même travail).
+# Une seule exécution à la fois. Une exécution en cours n'est pas annulée (un
+# passage planifié ne doit pas interrompre un déploiement) : la suivante attend.
 concurrency:
   group: deploy-production
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
+  # Vérification légère, sur les exécutions planifiées seulement.
+  check:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      changed: ${{ steps.decide.outputs.changed }}
+    steps:
+      - name: Récupérer le script de vérification
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/check_updates.py
+          sparse-checkout-cone-mode: false
+
+      - name: Restaurer l'état du dernier export
+        uses: actions/cache/restore@v4
+        with:
+          path: .deploy-state
+          key: deploy-state-${{ github.run_id }}
+          restore-keys: deploy-state-
+
+      - name: Nouvelles données nflverse ?
+        id: decide
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/check_updates.py decide --state .deploy-state
+
+      # Rien de nouveau : l'état en cache est celui du site, on peut alerter.
+      # (Sinon, l'alerte est évaluée après l'export, dans le job deploy.)
+      - name: Matchs en retard de publication ?
+        if: steps.decide.outputs.changed == 'false'
+        run: python3 scripts/check_updates.py alert --state .deploy-state
+
   deploy:
+    needs: check
+    # Push et lancement manuel : toujours. Planifié : seulement si « check » a
+    # vu de nouvelles données.
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.check.outputs.changed == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -81,6 +124,21 @@ jobs:
           key: nflverse-data-${{ github.run_id }}
           restore-keys: nflverse-data-
 
+      - name: Restaurer l'état du dernier export
+        uses: actions/cache/restore@v4
+        with:
+          path: .deploy-state
+          key: deploy-state-${{ github.run_id }}
+          restore-keys: deploy-state-
+
+      # Relevé pris avant le téléchargement : une publication nflverse
+      # survenue pendant l'export sera vue au passage suivant.
+      - name: Relever l'état des sources nflverse
+        timeout-minutes: 2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/check_updates.py snapshot --out sources-new.json
+
       # Planifié, ou manuel avec « Retélécharger » : téléchargement forcé ; en
       # cas d'échec, l'étape échoue et rien n'est déployé.
       # Push : cache réutilisé s'il a moins de 6 h, sinon téléchargement.
@@ -90,10 +148,11 @@ jobs:
           EVENT: ${{ github.event_name }}
           REFRESH_INPUT: ${{ inputs.refresh }}
         run: |
+          args="--out dist --hash-file data-hash.txt --status-file status-new.json"
           if [ "$EVENT" = "push" ] || { [ "$EVENT" = "workflow_dispatch" ] && [ "$REFRESH_INPUT" = "false" ]; }; then
-            python -m app.export --out dist --hash-file data-hash.txt
+            python -m app.export $args
           else
-            python -m app.export --refresh --out dist --hash-file data-hash.txt
+            python -m app.export --refresh $args
           fi
 
       - name: Sauvegarder les données en cache
@@ -116,13 +175,6 @@ jobs:
         timeout-minutes: 2
         run: node --test "tests/js/*.test.js"
 
-      - name: Récupérer l'empreinte du dernier déploiement
-        uses: actions/cache/restore@v4
-        with:
-          path: .last-deploy
-          key: last-deploy-${{ github.run_id }}
-          restore-keys: last-deploy-
-
       - name: Décider du déploiement
         id: decide
         env:
@@ -130,19 +182,24 @@ jobs:
           EVENT: ${{ github.event_name }}
         run: |
           new=$(cat data-hash.txt)
-          old=$(cat .last-deploy/hash 2>/dev/null || echo "aucune")
+          old=$(cat .deploy-state/hash 2>/dev/null || echo "aucune")
           echo "Empreinte actuelle : $new"
           echo "Dernier déploiement : $old"
           echo "month=$(date -u +%Y-%m)" >> "$GITHUB_OUTPUT"
+          # record : l'état de l'export devient celui du site (déployé, ou
+          # identique à ce qui est déjà en ligne). Sans secrets : rien.
           if [ "$HAS_TOKEN" != "true" ]; then
             echo "deploy=false" >> "$GITHUB_OUTPUT"
+            echo "record=false" >> "$GITHUB_OUTPUT"
             echo "::warning::Secrets Vercel absents (VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID) : export et tests OK, déploiement sauté."
             echo "Secrets Vercel absents : déploiement sauté (voir README, section Déploiement)." >> "$GITHUB_STEP_SUMMARY"
           elif [ "$EVENT" = "schedule" ] && [ "$new" = "$old" ]; then
             echo "deploy=false" >> "$GITHUB_OUTPUT"
-            echo "Données inchangées depuis le dernier déploiement : déploiement sauté." >> "$GITHUB_STEP_SUMMARY"
+            echo "record=true" >> "$GITHUB_OUTPUT"
+            echo "Données du site inchangées : déploiement sauté." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "deploy=true" >> "$GITHUB_OUTPUT"
+            echo "record=true" >> "$GITHUB_OUTPUT"
           fi
 
       # Paquets npm de la CLI Vercel en cache (renouvelé chaque mois pour
@@ -179,15 +236,26 @@ jobs:
           url=$(vercel deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}")
           echo "Déployé : $url" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Mémoriser l'empreinte déployée
-        if: steps.decide.outputs.deploy == 'true'
+      # Déployé, ou données identiques à celles du site : l'état devient
+      # celui du site. Sans secrets Vercel, rien n'est enregistré.
+      - name: Mémoriser l'état du site
+        id: state
+        if: steps.decide.outputs.record == 'true'
         run: |
-          mkdir -p .last-deploy
-          cp data-hash.txt .last-deploy/hash
+          mkdir -p .deploy-state
+          cp data-hash.txt .deploy-state/hash
+          cp sources-new.json .deploy-state/sources.json
+          cp status-new.json .deploy-state/status.json
 
-      - name: Sauvegarder l'empreinte
-        if: steps.decide.outputs.deploy == 'true'
+      - name: Sauvegarder l'état
+        if: steps.state.outcome == 'success'
         uses: actions/cache/save@v4
         with:
-          path: .last-deploy
-          key: last-deploy-${{ github.run_id }}
+          path: .deploy-state
+          key: deploy-state-${{ github.run_id }}
+
+      # Après le déploiement : le site est à jour, mais un match reste-t-il
+      # sans stats plus de 24 h après sa fin ? Échec (et e-mail) si oui.
+      - name: Matchs en retard de publication ?
+        if: steps.state.outcome == 'success'
+        run: python scripts/check_updates.py alert --state .deploy-state
