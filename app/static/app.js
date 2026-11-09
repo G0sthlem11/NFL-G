@@ -245,6 +245,12 @@ function teamLine(abbr, score, outcome, eager = false) {
     </div>`;
 }
 
+// Durée d'un match, coup d'envoi compris : au-delà, un match sans score est
+// en attente de publication par nflverse, plus « à venir ».
+const GAME_LENGTH_MS = 4 * 3600 * 1000;
+const resultPending = (g) => g.status !== "final" && g.kickoff_paris
+  && Date.now() - new Date(g.kickoff_paris).getTime() > GAME_LENGTH_MS;
+
 function gameRow(g, eager = false) {
   const kickoff = g.kickoff_paris ? new Date(g.kickoff_paris) : null;
   const time = kickoff ? fmtTime.format(kickoff) : "—";
@@ -256,12 +262,14 @@ function gameRow(g, eager = false) {
     homeCls = awayWins ? "is-loser" : "is-winner";
   }
   // Match terminé : le score suffit, seule la prolongation est signalée.
+  // Commencé depuis plus de 4 h sans score : nflverse n'a pas encore publié
+  // le résultat, « À venir » serait trompeur.
   const status = final
-    ? (g.overtime ? "<span>Prol.</span>" : "")
-    : "<span>À venir</span>";
+    ? (g.overtime ? "<span>Prol.</span>" : "") + (g.stats_pending ? `<span class="is-pending">Stats en attente</span>` : "")
+    : resultPending(g) ? `<span class="is-pending">Score en attente</span>` : "<span>À venir</span>";
   const label = final
     ? `${g.away_team} ${g.away_score}, ${g.home_team} ${g.home_score}${g.overtime ? ", après prolongation" : ""}`
-    : `${g.away_team} chez ${g.home_team}, ${time}`;
+    : `${g.away_team} chez ${g.home_team}, ${time}${resultPending(g) ? ", score en attente" : ""}`;
   return `
     <a class="game ${final ? "is-final" : "is-scheduled"}" href="#/game/${esc(g.game_id)}" aria-label="${esc(label)}">
       <div class="game-status"><span class="time">${esc(time)}</span>${status}</div>
@@ -628,7 +636,8 @@ function scoreboard(g) {
       ${final ? `<span class="sb-score ${hw}">${dash(g.home_score)}</span>` : ""}
       ${team(g.home_team, hw, "right")}
     </div>
-    <p class="sb-status">${final ? (g.overtime ? "Final après prolongation" : "Final") : "Match à venir, heure de Paris"}</p>
+    <p class="sb-status">${final ? (g.overtime ? "Final après prolongation" : "Final")
+      : resultPending(g) ? "Score en attente de publication par nflverse" : "Match à venir, heure de Paris"}</p>
     ${quarterTable(g)}
     ${conditions(g) ? `<p class="conditions">${conditions(g)}</p>` : ""}`;
 }
@@ -647,10 +656,16 @@ async function renderGame(gameId) {
   if (seq !== state.routeSeq) return;
   const g = d.game;
   document.title = `${g.away_team} – ${g.home_team}, ${g.week_label} — NFL Gameday`;
-  const body = g.status === "final"
-    ? `${teamStatsTable(g, d.away_stats, d.home_stats)}
-       ${keyPlayers(d.key_players)}`
-    : "";
+  // Terminé, mais stats des joueurs pas encore publiées : une mention plutôt
+  // que des tableaux de « — » et des cartes vides.
+  const pending = `
+    <section class="block">
+      <p class="stats-pending">Stats en attente de publication. nflverse les publie en général quelques heures après le match ; elles apparaîtront à la prochaine mise à jour.</p>
+    </section>`;
+  const body = g.status !== "final" ? ""
+    : g.stats_pending ? pending
+    : `${teamStatsTable(g, d.away_stats, d.home_stats)}
+       ${keyPlayers(d.key_players)}`;
   paint(`
     <a class="back" href="#/week/${g.week}">← ${esc(g.week_label)}</a>
     <header class="game-head">${scoreboard(g)}</header>

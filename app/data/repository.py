@@ -42,10 +42,27 @@ class NflRepository:
             out.setdefault(q["game_id"], []).append(q)
         return out
 
+    def _games_with_stats(self) -> set[str]:
+        """Matchs pour lesquels nflverse a publié des stats de joueurs."""
+        version = (self.cache.meta() or {}).get("fetched_at")
+        if getattr(self, "_with_stats_version", object()) != version:
+            ps = self.cache.get("player_stats")
+            self._with_stats = set(ps["game_id"].drop_nulls().unique().to_list()) \
+                if not ps.is_empty() and "game_id" in ps.columns else set()
+            self._with_stats_version = version
+        return self._with_stats
+
     def _to_games(self, sched: pl.DataFrame) -> list[Game]:
         rows = sched.sort("gameday", "gametime", "game_id").to_dicts()
         quarters = self._quarters_by_game([r["game_id"] for r in rows])
-        return [to_game(r, quarters.get(r["game_id"])) for r in rows]
+        with_stats = self._games_with_stats()
+        games = [to_game(r, quarters.get(r["game_id"])) for r in rows]
+        for g in games:
+            g.stats_pending = g.status == "final" and g.game_id not in with_stats
+        return games
+
+    def all_games(self) -> list[Game]:
+        return self._to_games(self._schedules())
 
     # --- API publique ----------------------------------------------------
     def teams(self) -> list[Team]:

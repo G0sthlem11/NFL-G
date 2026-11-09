@@ -130,3 +130,33 @@ def test_mvp_reference_adds_previous_season_early(tmp_path):
     assert scale.seasons == (2025, 2026)
     # Ligne 2025 (WR, 140 yds) + QB 2026 de la mini-saison (250 yds -> 0,4 × 250 = 100).
     assert scale.sorted["offense"] == [140.0] and scale.sorted["qb"] == [100.0]
+
+
+def test_stats_pending_and_export_status(tmp_path, monkeypatch):
+    """Match terminé sans stats de joueurs : signalé à l'API et dans l'état d'export."""
+    from app.export import status
+
+    def without_stats(season):
+        frames = fake_season(season)
+        frames["player_stats"] = frames["player_stats"].with_columns(pl.lit("2026_99_X_Y").alias("game_id"))
+        return frames
+
+    cache = SeasonCache(2026, data_dir=tmp_path, downloader=without_stats,
+                        datasets=("schedules", "teams", "player_stats"))
+    repo = NflRepository(cache)
+    monkeypatch.setattr(main, "repo", repo)
+    client = TestClient(main.app)
+    g1, = client.get("/api/weeks/1").json()
+    g2, = client.get("/api/weeks/2").json()
+    assert (g1["status"], g1["stats_pending"]) == ("final", True)
+    assert (g2["status"], g2["stats_pending"]) == ("scheduled", False)  # à venir : pas « en attente »
+    st = status(repo)
+    assert st["season"] == 2026 and st["exported_at"]
+    by_id = {g["game_id"]: g for g in st["games"]}
+    assert by_id["2026_01_AAA_BBB"] == {"game_id": "2026_01_AAA_BBB", "label": "AAA @ BBB, Week 1",
+                                        "kickoff_utc": "2026-09-13T17:00:00+00:00", "final": True,
+                                        "stats_pending": True}
+
+
+def test_game_with_stats_is_not_pending(client):
+    assert client.get("/api/weeks/1").json()[0]["stats_pending"] is False
